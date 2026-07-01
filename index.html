@@ -1,0 +1,2870 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Walking Story — Prototype SIG</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body { background:#0a0a0f; font-family:system-ui,sans-serif; color:#fff; overflow:hidden; height:100vh; }
+canvas { display:block; position:absolute; top:0; left:0; width:100%; height:100%; }
+
+#topbar { position:absolute;top:0;left:0;right:0;padding:16px 24px;background:linear-gradient(to bottom,rgba(0,0,0,.75),transparent);pointer-events:none; }
+#story-title { font-size:11px;letter-spacing:.14em;color:rgba(255,210,140,.85);text-transform:uppercase;margin-bottom:4px; }
+#story-chapter { font-size:18px;font-weight:500; }
+#km-badge { position:absolute;top:18px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.5);border:.5px solid rgba(255,210,140,.35);border-radius:20px;padding:5px 16px;font-size:12px;color:rgba(255,210,140,.9);white-space:nowrap;pointer-events:none; }
+#view-label { position:absolute;top:18px;right:24px;font-size:11px;letter-spacing:.1em;color:rgba(255,255,255,.35);text-transform:uppercase;pointer-events:none; }
+#debug { position:absolute;top:55px;right:24px;font-size:10px;color:rgba(255,255,0,.55);font-family:monospace;pointer-events:none;line-height:1.6; }
+
+#narrative-box { position:absolute;bottom:155px;left:50%;transform:translateX(-50%);width:500px;opacity:0;transition:opacity .6s;pointer-events:none; }
+#narrative-text { font-size:14px;line-height:1.75;color:rgba(255,255,255,.95);background:rgba(0,0,0,.65);padding:14px 18px;border-radius:8px;border-left:2px solid rgba(255,210,140,.7); }
+
+#progress-wrap { position:absolute;bottom:105px;left:50%;transform:translateX(-50%);width:340px;text-align:center;pointer-events:none; }
+#progress-label { font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.35);margin-bottom:7px;text-transform:uppercase; }
+#progress-track { height:2px;background:rgba(255,255,255,.12);border-radius:2px; }
+#progress-fill { height:2px;background:rgba(255,210,140,.8);border-radius:2px;width:0%; }
+#hint { position:absolute;bottom:68px;left:50%;transform:translateX(-50%);font-size:11px;color:rgba(255,255,255,.3);white-space:nowrap;pointer-events:none; }
+#step-btn.blocked { background:rgba(255,140,80,.25) !important; border-color:rgba(255,140,80,.6) !important; animation:pulse-blocked 1.6s ease-in-out infinite; }
+@keyframes pulse-blocked { 0%,100%{opacity:1;} 50%{opacity:.65;} }
+
+/* Panel SIG */
+#sig-panel { position:absolute;top:60px;left:24px;width:240px;pointer-events:all; }
+#sig-title { font-size:10px;letter-spacing:.1em;color:rgba(255,255,255,.35);text-transform:uppercase;margin-bottom:10px; }
+.sig-btn { display:block;width:100%;background:rgba(255,255,255,.07);border:.5px solid rgba(255,255,255,.18);color:rgba(255,255,255,.75);font-size:11px;padding:8px 12px;border-radius:8px;cursor:pointer;margin-bottom:6px;text-align:left;transition:background .15s; }
+.sig-btn:hover { background:rgba(255,255,255,.13); }
+.sig-btn input { display:none; }
+.sig-btn.loaded { border-color:rgba(100,255,140,.5);color:rgba(120,255,160,.9); }
+.sig-btn.loaded::before { content:'✓ '; }
+#sig-origin { font-size:10px;color:rgba(255,255,255,.28);margin:8px 0 3px;font-family:monospace;line-height:1.6;word-break:break-all; }
+#sig-status { font-size:11px;margin-top:5px;min-height:16px;line-height:1.6; }
+
+/* POI panel carte */
+#poi-panel { position:absolute;top:50%;right:24px;transform:translateY(-50%);width:200px;pointer-events:all;display:none; }
+#poi-panel-title { font-size:10px;letter-spacing:.12em;color:rgba(255,255,255,.35);text-transform:uppercase;margin-bottom:8px; }
+.poi-card { background:rgba(0,0,0,.55);border:.5px solid rgba(255,210,140,.25);border-radius:8px;padding:10px 13px;margin-bottom:8px;cursor:pointer; }
+.poi-card:hover { background:rgba(255,210,140,.1); }
+.poi-name { font-size:12px;font-weight:500;color:rgba(255,210,140,.9); }
+.poi-dist { font-size:11px;color:rgba(255,255,255,.4);margin-top:3px; }
+
+/* Popup attributs bâti */
+#attr-popup { position:absolute;pointer-events:none;background:rgba(10,8,5,.92);border:1px solid rgba(255,210,140,.35);border-radius:10px;padding:14px 16px;width:255px;opacity:0;transition:opacity .2s;backdrop-filter:blur(8px);z-index:200; }
+#attr-popup.visible { opacity:1;pointer-events:all; }
+#attr-close { position:absolute;top:8px;right:10px;cursor:pointer;color:rgba(255,255,255,.4);font-size:14px;line-height:1; }
+#attr-close:hover { color:#fff; }
+#attr-title { font-size:13px;font-weight:600;color:rgba(255,210,140,.95);margin-bottom:10px;padding-right:16px; }
+.attr-row { display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px;gap:8px; }
+.attr-key { font-size:10px;letter-spacing:.08em;color:rgba(255,255,255,.38);text-transform:uppercase;flex-shrink:0; }
+.attr-val { font-size:12px;color:rgba(255,255,255,.85);text-align:right;word-break:break-word; }
+
+/* Écran vide (avant chargement) */
+#empty-screen { position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;pointer-events:none;transition:opacity .8s; }
+#empty-screen.hidden { opacity:0; }
+#empty-icon { font-size:48px;margin-bottom:20px;opacity:.4; }
+#empty-msg { font-size:15px;color:rgba(255,255,255,.35);text-align:center;line-height:1.8; }
+
+/* Loader */
+#loader { position:absolute;inset:0;background:rgba(0,0,0,.78);display:flex;flex-direction:column;align-items:center;justify-content:center;z-index:500;opacity:0;pointer-events:none;transition:opacity .3s; }
+#loader.visible { opacity:1;pointer-events:all; }
+#loader-text { font-size:14px;color:rgba(255,210,140,.9);margin-top:16px;letter-spacing:.06em; }
+.spinner { width:38px;height:38px;border:3px solid rgba(255,210,140,.2);border-top-color:rgba(255,210,140,.9);border-radius:50%;animation:spin .8s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Fin */
+#end-screen { position:absolute;inset:0;background:rgba(0,0,0,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity 1.2s; }
+#end-screen.visible { opacity:1;pointer-events:all; }
+#end-title { font-size:28px;font-weight:500;color:rgba(255,210,140,1);margin-bottom:12px; }
+#end-sub { font-size:15px;color:rgba(255,255,255,.6);margin-bottom:30px;text-align:center; }
+#end-btn { background:rgba(255,210,140,.2);border:1px solid rgba(255,210,140,.5);color:rgba(255,210,140,1);font-size:14px;padding:12px 32px;border-radius:24px;cursor:pointer; }
+
+/* Modal export */
+#export-modal { position:absolute;inset:0;background:rgba(0,0,0,.82);display:flex;align-items:center;justify-content:center;z-index:600;opacity:0;pointer-events:none;transition:opacity .25s; }
+#export-modal.visible { opacity:1;pointer-events:all; }
+#export-box { background:#141414;border:1px solid rgba(255,210,140,.25);border-radius:14px;padding:28px 32px;width:460px;max-width:95vw; }
+#export-box h2 { font-size:16px;font-weight:600;color:rgba(255,210,140,.95);margin-bottom:6px; }
+#export-box p  { font-size:12px;color:rgba(255,255,255,.4);margin-bottom:20px;line-height:1.6; }
+.export-mode { display:flex;flex-direction:column;gap:10px;margin-bottom:20px; }
+.export-radio { display:flex;align-items:flex-start;gap:10px;background:rgba(255,255,255,.05);border:.5px solid rgba(255,255,255,.12);border-radius:8px;padding:12px 14px;cursor:pointer;transition:background .15s; }
+.export-radio:hover { background:rgba(255,255,255,.09); }
+.export-radio.selected { border-color:rgba(255,210,140,.5);background:rgba(255,210,140,.08); }
+.export-radio input { margin-top:2px;accent-color:rgba(255,210,140,.9); }
+.export-radio-label { font-size:12px;font-weight:500;color:rgba(255,255,255,.85); }
+.export-radio-desc  { font-size:11px;color:rgba(255,255,255,.38);margin-top:3px;line-height:1.5; }
+#export-urls { display:none;margin-bottom:16px; }
+#export-urls.visible { display:block; }
+.url-field { margin-bottom:10px; }
+.url-field label { font-size:10px;letter-spacing:.08em;color:rgba(255,255,255,.35);text-transform:uppercase;display:block;margin-bottom:4px; }
+.url-field input { width:100%;background:rgba(255,255,255,.06);border:.5px solid rgba(255,255,255,.18);color:#fff;font-size:11px;padding:7px 10px;border-radius:6px;font-family:monospace; }
+.url-field input::placeholder { color:rgba(255,255,255,.25); }
+#export-title-field { margin-bottom:16px; }
+#export-title-field label { font-size:10px;letter-spacing:.08em;color:rgba(255,255,255,.35);text-transform:uppercase;display:block;margin-bottom:4px; }
+#export-title-field input { width:100%;background:rgba(255,255,255,.06);border:.5px solid rgba(255,255,255,.18);color:#fff;font-size:12px;padding:8px 10px;border-radius:6px; }
+.export-actions { display:flex;gap:10px;justify-content:flex-end; }
+.export-cancel { background:transparent;border:.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.6);font-size:12px;padding:9px 20px;border-radius:20px;cursor:pointer; }
+.export-go { background:rgba(255,210,140,.2);border:1px solid rgba(255,210,140,.5);color:rgba(255,210,140,1);font-size:12px;font-weight:500;padding:9px 22px;border-radius:20px;cursor:pointer; }
+#export-progress { font-size:11px;color:rgba(100,255,140,.8);margin-top:10px;min-height:16px;text-align:center; }
+</style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<div id="topbar">
+  <div id="story-title">Walking Story — Prototype SIG</div>
+  <div id="story-chapter" id="story-chapter">—</div>
+</div>
+<div id="km-badge">0.00 km parcouru</div>
+<div id="view-label">Vue FPS</div>
+<div id="debug"></div>
+<div id="narrative-box"><div id="narrative-text"></div></div>
+<div id="progress-wrap">
+  <div id="progress-label">Progression</div>
+  <div id="progress-track"><div id="progress-fill"></div></div>
+</div>
+<div id="hint">ESPACE ou bouton Marcher · Clic bâtiment = attributs · Échap = fermer</div>
+
+<!-- Écran d'accueil vide -->
+<div id="empty-screen">
+  <div id="empty-icon">🗺️</div>
+  <div id="empty-msg">Chargez vos données SIG pour commencer<br><span style="font-size:12px;color:rgba(255,255,255,.22)">MNT en premier pour fixer le référentiel UTM</span></div>
+</div>
+
+<!-- Panel SIG -->
+<div id="sig-panel">
+  <div id="sig-title">📂 Données SIG — UTM 36N</div>
+  <label class="sig-btn" id="btn-tif">
+    🏔️ MNT (GeoTIFF .tif / .tiff)
+    <input type="file" accept=".tif,.tiff" onchange="loadGeoTIFF(this)">
+  </label>
+  <label class="sig-btn" id="btn-parcours">
+    〰️ Parcours (GeoJSON LineString)
+    <input type="file" accept=".geojson,.json" onchange="loadParcours(this)">
+  </label>
+  <label class="sig-btn" id="btn-poi">
+    📍 POI (GeoJSON Point)
+    <input type="file" accept=".geojson,.json" onchange="loadPOI(this)">
+  </label>
+  <label class="sig-btn" id="btn-bati">
+    🏛️ Bâti (GeoJSON Polygon)
+    <input type="file" accept=".geojson,.json" onchange="loadBati(this)">
+  </label>
+  <label class="sig-btn" id="btn-os">
+    🌿 Occupation du sol (GeoJSON)
+    <input type="file" accept=".geojson,.json" onchange="loadOS(this)">
+  </label>
+  <label class="sig-btn" id="btn-narr">
+    🎙️ Narrations (GeoJSON Point)
+    <input type="file" accept=".geojson,.json" onchange="loadNarrations(this)">
+  </label>
+  <label class="sig-btn" id="btn-audio">
+    🔊 Fichiers audio (MP3/WAV, multiple)
+    <input type="file" accept=".mp3,.wav,.ogg,.m4a" multiple onchange="loadAudioFiles(this)">
+  </label>
+  <label class="sig-btn" id="btn-sat">
+    🛰️ Satellite (GeoTIFF RGB)
+    <input type="file" accept=".tif,.tiff" onchange="loadSatellite(this)">
+  </label>
+  <div id="sig-origin">Origine : non définie<br>→ Charger le MNT en premier</div>
+  <div id="sig-status"></div>
+</div>
+
+<div id="poi-panel"><div id="poi-panel-title">Points d'intérêt</div></div>
+
+<div id="attr-popup">
+  <div id="attr-close" onclick="closeAttr()">✕</div>
+  <div id="attr-title">—</div>
+  <div id="attr-body"></div>
+</div>
+
+<div id="loader"><div class="spinner"></div><div id="loader-text">Chargement…</div></div>
+
+<!-- Modal export -->
+<div id="export-modal">
+  <div id="export-box">
+    <h2>📦 Exporter le parcours</h2>
+    <p>Génère un fichier HTML autonome reproduisant exactement ce parcours avec toutes les données chargées.</p>
+
+    <div id="export-title-field">
+      <label>Titre du parcours</label>
+      <input type="text" id="export-title" value="Walking Story" placeholder="Ex: Palmyre — IIIe siècle">
+    </div>
+
+    <div class="export-mode">
+      <label class="export-radio selected" onclick="selectExportMode('autonome',this)">
+        <input type="radio" name="emode" value="autonome" checked>
+        <div>
+          <div class="export-radio-label">🗂️ Autonome complet</div>
+          <div class="export-radio-desc">Toutes les données embarquées dans le HTML. Fonctionne 100% offline. Taille : 1–8 Mo selon la zone.</div>
+        </div>
+      </label>
+      <label class="export-radio" onclick="selectExportMode('hybride',this)">
+        <input type="radio" name="emode" value="hybride">
+        <div>
+          <div class="export-radio-label">🌐 Hybride — MNT + OS via URL</div>
+          <div class="export-radio-desc">Le MNT et l'OS sont chargés depuis un serveur. Le reste est inline. Taille : ~200 ko. Nécessite un hébergement.</div>
+        </div>
+      </label>
+      <label class="export-radio" onclick="selectExportMode('distant',this)">
+        <input type="radio" name="emode" value="distant">
+        <div>
+          <div class="export-radio-label">☁️ Semi-distant — tout via URLs</div>
+          <div class="export-radio-desc">Seul le code est dans le HTML. Toutes les données sont sur le serveur. Taille : ~150 ko.</div>
+        </div>
+      </label>
+      <label class="export-radio" onclick="selectExportMode('relatif',this)">
+        <input type="radio" name="emode" value="relatif">
+        <div>
+          <div class="export-radio-label">📁 Relatif — même dossier serveur</div>
+          <div class="export-radio-desc">HTML + fichiers dans le même dossier. Chemins relatifs (./mnt.tif, ./parcours.geojson…). Pas de CORS. Recommandé pour un déploiement web. Taille : ~150 ko.</div>
+        </div>
+      </label>
+    </div>
+
+    <div id="export-urls">
+      <div class="url-field">
+        <label>URL du MNT (.tif)</label>
+        <input type="text" id="url-mnt" placeholder="https://monserveur.com/mnt.tif">
+      </div>
+      <div class="url-field" id="url-os-field">
+        <label>URL Occupation du sol (.geojson)</label>
+        <input type="text" id="url-os" placeholder="https://monserveur.com/os.geojson">
+      </div>
+      <div class="url-field" id="url-all-field" style="display:none">
+        <label>URL dossier données (base)</label>
+        <input type="text" id="url-all" placeholder="https://monserveur.com/data/">
+      </div>
+    </div>
+
+    <div id="export-progress"></div>
+    <div class="export-actions">
+      <button class="export-cancel" onclick="closeExport()">Annuler</button>
+      <button class="export-go" onclick="doExport()">⬇ Générer HTML</button>
+    </div>
+  </div>
+</div>
+
+<div id="end-screen">
+  <div id="end-title">Parcours terminé</div>
+  <div id="end-sub">Vous avez atteint la fin du tracé.</div>
+  <button id="end-btn" onclick="resetJourney()">↩ Recommencer</button>
+</div>
+
+<!-- Contrôles -->
+<div style="position:absolute;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;z-index:999;">
+  <button id="btn-fps"    onclick="setView('fps')"    style="background:rgba(255,210,140,.2);border:.5px solid rgba(255,210,140,.55);color:rgba(255,210,140,1);font-size:12px;padding:8px 18px;border-radius:20px;cursor:pointer;">Vue FPS</button>
+  <button id="btn-aerial" onclick="setView('aerial')" style="background:rgba(255,255,255,.07);border:.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);font-size:12px;padding:8px 18px;border-radius:20px;cursor:pointer;">Vue aérienne</button>
+  <button id="btn-map"    onclick="setView('map')"    style="background:rgba(255,255,255,.07);border:.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);font-size:12px;padding:8px 18px;border-radius:20px;cursor:pointer;">Carte</button>
+  <button id="mute-btn"   onclick="toggleMute()"      style="background:rgba(255,255,255,.07);border:.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);font-size:12px;padding:8px 14px;border-radius:20px;cursor:pointer;">🔊 Son</button>
+  <select id="voice-select" onchange="setVoiceFromSelect(this.value)" style="background:rgba(255,255,255,.07);border:.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);font-size:11px;padding:7px 10px;border-radius:20px;cursor:pointer;max-width:140px;">
+    <option value="">Voix : auto</option>
+  </select>
+  <button id="step-btn"
+    onmousedown="startWalking()" onmouseup="stopWalking()" onmouseleave="stopWalking()"
+    ontouchstart="startWalking()" ontouchend="stopWalking()"
+    style="background:rgba(255,210,140,.15);border:1px solid rgba(255,210,140,.55);color:rgba(255,210,140,1);font-size:13px;font-weight:500;padding:10px 30px;border-radius:24px;cursor:pointer;user-select:none;">
+    ▶ Marcher
+  </button>
+  <button id="accel-btn" onclick="toggleAccelMode()" style="display:none;background:rgba(120,200,255,.15);border:1px solid rgba(120,200,255,.55);color:rgba(140,210,255,1);font-size:12px;font-weight:500;padding:9px 18px;border-radius:24px;cursor:pointer;" title="Avancer en marchant réellement avec le téléphone">
+    📱 Mode marche
+  </button>
+  <button onclick="openExport()" style="background:rgba(255,255,255,.07);border:.5px solid rgba(255,255,255,.2);color:rgba(255,255,255,.8);font-size:12px;padding:8px 14px;border-radius:20px;cursor:pointer;" title="Exporter ce parcours en HTML autonome">📦 Exporter</button>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/geotiff@2.1.3/dist-browser/geotiff.js"></script>
+<script>
+'use strict';
+
+// ══════════════════════════════════════════════════════════
+// RÉFÉRENTIEL PARTAGÉ UTM
+// Fixé par le premier fichier chargé (idéalement le MNT)
+// Toutes les couches suivantes s'y réfèrent automatiquement
+// ══════════════════════════════════════════════════════════
+let geoOrigin = null;        // { e, n } mètres UTM
+const SCENE_SCALE = 1; // 1 unité = 1 mètre réel
+
+function setOrigin(e, n) {
+  if (geoOrigin) return;
+  geoOrigin = { e, n };
+  document.getElementById('sig-origin').textContent =
+    'Origine UTM 36N fixée :\nE ' + Math.round(e) + '\nN ' + Math.round(n) +
+    '\n(1 unité = 1 m)';
+}
+
+function utmToScene(e, n) {
+  return {
+    x:  (e - geoOrigin.e) * SCENE_SCALE,
+    z: -(n - geoOrigin.n) * SCENE_SCALE
+  };
+}
+
+function isUTM(x, y) {
+  return Math.abs(x) > 180 || Math.abs(y) > 180;
+}
+
+function wgs84ToUTM(lon, lat) {
+  // Approximation Mercator sphérique → mètres
+  return {
+    e: (lon + 180) / 360 * 40075017,
+    n: Math.log(Math.tan((90 + lat) * Math.PI / 360)) / (Math.PI / 180) * 111320
+  };
+}
+
+function anyToScene(cx, cy) {
+  if (isUTM(cx, cy)) {
+    if (!geoOrigin) setOrigin(cx, cy);
+    return utmToScene(cx, cy);
+  } else {
+    const m = wgs84ToUTM(cx, cy);
+    if (!geoOrigin) setOrigin(m.e, m.n);
+    return utmToScene(m.e, m.n);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// RENDERER
+// ══════════════════════════════════════════════════════════
+const canvas = document.getElementById('canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a0f); // noir au départ, bleu ciel après MNT chargé
+
+const W = window.innerWidth, H = window.innerHeight;
+const fpsCam    = new THREE.PerspectiveCamera(68, W/H, 0.1, 5000);
+const aerialCam = new THREE.PerspectiveCamera(52, W/H, 1, 50000);
+const mapCam    = new THREE.OrthographicCamera(-2000,2000,1400,-1400, 1, 100000);
+mapCam.position.set(0, 5000, 0); mapCam.lookAt(0,0,0);
+let activeCamera = fpsCam, currentView = 'fps';
+
+const raycaster = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+let buildingMeshes = [];
+
+// ══════════════════════════════════════════════════════════
+// LUMIÈRES
+// ══════════════════════════════════════════════════════════
+scene.add(new THREE.AmbientLight(0xffe8cc, 0.45));
+const sun = new THREE.DirectionalLight(0xfff5cc, 1.7);
+sun.position.set(800, 1300, 400);
+sun.castShadow = true;
+sun.shadow.mapSize.width = sun.shadow.mapSize.height = 2048;
+Object.assign(sun.shadow.camera, {near:1, far:8000, left:-3000, right:3000, top:3000, bottom:-3000});
+scene.add(sun);
+scene.add(new THREE.HemisphereLight(0xfff0dd, 0xb89050, 0.35));
+
+// Ciel (ajouté dès le départ mais invisible sur fond noir)
+const skyMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(30000, 16, 8),
+  new THREE.MeshBasicMaterial({color:0x7ab4d8, side:THREE.BackSide, transparent:true, opacity:0})
+);
+scene.add(skyMesh);
+const horizonMesh = new THREE.Mesh(
+  new THREE.CylinderGeometry(25000, 25000, 2000, 32, 1, true),
+  new THREE.MeshBasicMaterial({color:0xd4b87a, transparent:true, opacity:0, side:THREE.BackSide})
+);
+horizonMesh.position.y=4; scene.add(horizonMesh);
+
+function revealSky() {
+  scene.background = new THREE.Color(0x9ab8d0);
+  scene.fog = new THREE.FogExp2(0x9ab8d0, 0.00012); // ~8km de visibilité, moins agressif
+  skyMesh.material.opacity = 1;
+  skyMesh.material.transparent = false;
+  horizonMesh.material.opacity = 0.14;
+}
+
+// ══════════════════════════════════════════════════════════
+// TEXTURES PROCÉDURALES
+// ══════════════════════════════════════════════════════════
+function makeTerrainTex() {
+  const sz=512, c=document.createElement('canvas'); c.width=c.height=sz;
+  const ctx=c.getContext('2d');
+  const bg=ctx.createLinearGradient(0,0,sz,sz);
+  bg.addColorStop(0,'#c8a560'); bg.addColorStop(.5,'#d4b470'); bg.addColorStop(1,'#bfa055');
+  ctx.fillStyle=bg; ctx.fillRect(0,0,sz,sz);
+  for(let i=0;i<14000;i++){
+    const x=Math.random()*sz, y=Math.random()*sz, r=Math.random()*1.5+.3;
+    const v=120+Math.floor(Math.random()*55);
+    ctx.fillStyle=`rgba(${v+30},${v},${Math.floor(v*.6)},${Math.random()*.4+.1})`;
+    ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.fill();
+  }
+  for(let i=0;i<22;i++){
+    const x=Math.random()*sz, y=Math.random()*sz;
+    const g=ctx.createRadialGradient(x,y,0,x,y,30+Math.random()*55);
+    g.addColorStop(0,'rgba(80,60,35,.4)'); g.addColorStop(1,'rgba(80,60,35,0)');
+    ctx.fillStyle=g; ctx.fillRect(0,0,sz,sz);
+  }
+  for(let i=0;i<35;i++){
+    const x=Math.random()*sz, y=Math.random()*sz;
+    ctx.strokeStyle=`rgba(75,55,25,${Math.random()*.2+.05})`;
+    ctx.lineWidth=Math.random()*1.5+.3;
+    ctx.beginPath();ctx.moveTo(x,y);
+    ctx.lineTo(x+(-25+Math.random()*50), y+(-25+Math.random()*50)); ctx.stroke();
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(8,8); return t;
+}
+
+function makeWallTex() {
+  const sz=256, c=document.createElement('canvas'); c.width=c.height=sz;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#c9ad7e'; ctx.fillRect(0,0,sz,sz);
+  const bw=32, bh=18;
+  for(let row=0; row*bh<sz+bh; row++){
+    const ox=(row%2)*bw/2;
+    for(let col=-1; col*bw<sz+bw; col++){
+      const x=col*bw+ox, y=row*bh;
+      const v=-15+Math.floor(Math.random()*30);
+      ctx.fillStyle=`rgba(${v>0?255:0},${v>0?255:0},${v>0?255:0},${Math.abs(v)/255*.35})`;
+      ctx.fillRect(x+1,y+1,bw-2,bh-2);
+      ctx.strokeStyle='rgba(60,45,25,.55)'; ctx.lineWidth=1.5;
+      ctx.strokeRect(x+.75,y+.75,bw-1.5,bh-1.5);
+    }
+  }
+  for(let i=0;i<2500;i++){
+    const x=Math.random()*sz, y=Math.random()*sz;
+    ctx.fillStyle=`rgba(80,60,30,${Math.random()*.12})`;
+    ctx.beginPath();ctx.arc(x,y,Math.random()*1.2+.2,0,Math.PI*2);ctx.fill();
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(3,1.5); return t;
+}
+
+function makeRoofTex() {
+  const sz=128, c=document.createElement('canvas'); c.width=c.height=sz;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#b8985c'; ctx.fillRect(0,0,sz,sz);
+  for(let i=0;i<1800;i++){
+    const x=Math.random()*sz, y=Math.random()*sz;
+    ctx.fillStyle=`rgba(80,55,20,${Math.random()*.18})`;
+    ctx.beginPath();ctx.arc(x,y,Math.random()*2+.4,0,Math.PI*2);ctx.fill();
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(4,4); return t;
+}
+
+const terrainTex = makeTerrainTex();
+
+// ── Gestionnaire unique de texture terrain ──────────────
+// Priorité : satellite > OS > procédural
+// Appelé après chaque chargement de texture
+function applyTerrainTexture() {
+  if (!terrainMesh) return;
+  if (satTexture) {
+    terrainMesh.material.map = satTexture;
+    terrainMesh.material.color.set(0xffffff);
+  } else if (osTexture) {
+    terrainMesh.material.map = osTexture;
+    terrainMesh.material.color.set(0xffffff);
+  } else {
+    terrainMesh.material.map = terrainTex;
+    terrainMesh.material.color.set(0xffffff);
+  }
+  terrainMesh.material.needsUpdate = true;
+}
+const wallTex    = makeWallTex();
+const roofTex    = makeRoofTex();
+
+// ══════════════════════════════════════════════════════════
+// TERRAIN — construit depuis GeoTIFF uniquement
+// ══════════════════════════════════════════════════════════
+let terrainMesh = null;
+
+// Grille altitude en mémoire pour getAltAt(x,z)
+let altGrid = null; // { data, imgW, imgH, minAlt, ext }
+
+function getAltAt(x, z) {
+  if (!altGrid) return 0;
+  const { data, imgW, imgH, minAlt, ext } = altGrid;
+  const u  = Math.max(0, Math.min(1, (x - ext.minX) / (ext.maxX - ext.minX)));
+  const v  = Math.max(0, Math.min(1, (z - ext.minZ) / (ext.maxZ - ext.minZ)));
+  const fx = u * (imgW - 1);
+  const fy = v * (imgH - 1);
+  const x0 = Math.floor(fx), x1 = Math.min(imgW-1, x0+1);
+  const y0 = Math.floor(fy), y1 = Math.min(imgH-1, y0+1);
+  const tx = fx - x0, ty = fy - y0;
+  const rd = (px,py) => { const a=data[py*imgW+px]; return (isFinite(a)&&a>-9000)?a:null; };
+  const a00=rd(x0,y0), a10=rd(x1,y0), a01=rd(x0,y1), a11=rd(x1,y1);
+  const vals=[a00,a10,a01,a11].filter(vv=>vv!==null);
+  if(!vals.length) return 0;
+  const fb=vals.reduce((s,vv)=>s+vv,0)/vals.length;
+  const v00=a00??fb, v10=a10??fb, v01=a01??fb, v11=a11??fb;
+  const alt = v00*(1-tx)*(1-ty) + v10*tx*(1-ty) + v01*(1-tx)*ty + v11*tx*ty;
+  return (alt - minAlt) * SCENE_SCALE;
+}
+
+function buildTerrainFromRaster(imgW, imgH, data, minAlt, maxAlt, extScene) {
+  if (terrainMesh) { scene.remove(terrainMesh); terrainMesh.geometry.dispose(); }
+
+  altGrid = { data, imgW, imgH, minAlt, ext: extScene };
+
+  const sx = extScene.maxX - extScene.minX;
+  const sz = extScene.maxZ - extScene.minZ;
+  const cx = (extScene.minX + extScene.maxX) / 2;
+  const cz = (extScene.minZ + extScene.maxZ) / 2;
+  const segsX = Math.min(300, (imgW - 1) * 4);
+  const segsZ = Math.min(300, (imgH - 1) * 4);
+
+  // PlaneGeometry centré sur (0,0) puis positionné via mesh.position
+  const geo = new THREE.PlaneGeometry(sx, sz, segsX, segsZ);
+  geo.rotateX(-Math.PI / 2);
+  // NE PAS utiliser geo.translate — on positionne via mesh.position
+
+  const pos = geo.attributes.position;
+  for (let i = 0; i <= segsZ; i++) {
+    for (let j = 0; j <= segsX; j++) {
+      const vidx = i * (segsX+1) + j;
+      const px = Math.min(imgW-1, Math.floor((j/segsX) * (imgW-1)));
+      const py = Math.min(imgH-1, Math.floor((i/segsZ) * (imgH-1)));
+      const alt = data[py * imgW + px];
+      pos.setY(vidx, isFinite(alt) && alt > -9000 ? (alt - minAlt) * SCENE_SCALE : 0);
+    }
+  }
+  geo.computeVertexNormals();
+
+  terrainMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({ map: terrainTex }));
+  terrainMesh.position.set(cx, 0, cz); // positionnement via mesh, pas geo
+  terrainMesh.receiveShadow = true;
+  scene.add(terrainMesh);
+  applyTerrainTexture();
+}
+
+// ══════════════════════════════════════════════════════════
+// PARCOURS
+// ══════════════════════════════════════════════════════════
+let pathMesh = null;
+let pathPoints = [];
+let pathTotalLength = 0;
+let pathT = 0;
+
+function buildPath(pts) {
+  if (pathMesh) { scene.remove(pathMesh); pathMesh.geometry.dispose(); }
+  if (pts.length < 2) return;
+
+  // Densifie le tracé ET cale chaque point sur le terrain
+  const dense = [];
+  for (let i=0; i<pts.length-1; i++) {
+    const a = pts[i], b = pts[i+1];
+    const segLen = Math.sqrt((b.x-a.x)**2+(b.z-a.z)**2);
+    const steps = Math.max(1, Math.ceil(segLen / 0.1)); // point tous les 0.1u (~2m)
+    for (let s=0; s<steps; s++) {
+      const u = s/steps;
+      const x = a.x + (b.x-a.x)*u;
+      const z = a.z + (b.z-a.z)*u;
+      dense.push(new THREE.Vector3(x, getAltAt(x,z)+0.08, z));
+    }
+  }
+  // Dernier point
+  const last = pts[pts.length-1];
+  dense.push(new THREE.Vector3(last.x, getAltAt(last.x,last.z)+0.08, last.z));
+
+  // pathPoints devient les points densifiés — getPosOnPath s'en servira
+  pathPoints = dense;
+
+  pathTotalLength = 0;
+  for (let i=1; i<pathPoints.length; i++) pathTotalLength += pathPoints[i].distanceTo(pathPoints[i-1]);
+
+  const curve = new THREE.CatmullRomCurve3(pathPoints);
+
+  // Chemin plat : ruban au sol, pas un tube — plus réaliste et sans extrémités énormes
+  const pathWidth = 5; // 5m réels
+  const segments  = Math.min(pathPoints.length*2, 800);
+  const positions = [], uvs2 = [], indices2 = [], normals2 = [];
+
+  const pts2 = curve.getPoints(segments);
+  for (let i=0; i<pts2.length; i++) {
+    const p = pts2[i];
+    // Direction tangente
+    const prev = pts2[Math.max(0,i-1)];
+    const next = pts2[Math.min(pts2.length-1,i+1)];
+    const tx = next.x-prev.x, tz = next.z-prev.z;
+    const tlen = Math.sqrt(tx*tx+tz*tz)||1;
+    // Perpendiculaire au sol
+    const rx = -tz/tlen * pathWidth/2;
+    const rz =  tx/tlen * pathWidth/2;
+    const y = p.y + 0.01; // légèrement au-dessus du terrain
+    positions.push(p.x-rx, y, p.z-rz);
+    positions.push(p.x+rx, y, p.z+rz);
+    uvs2.push(0, i/pts2.length);
+    uvs2.push(1, i/pts2.length);
+    if (i < pts2.length-1) {
+      const b2 = i*2;
+      indices2.push(b2,b2+1,b2+2, b2+1,b2+3,b2+2);
+    }
+    normals2.push(0,1,0, 0,1,0);
+  }
+
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.Float32BufferAttribute(positions,3));
+  geo.setAttribute('normal',   new THREE.Float32BufferAttribute(normals2,3));
+  geo.setAttribute('uv',       new THREE.Float32BufferAttribute(uvs2,2));
+  geo.setIndex(indices2);
+
+  const sz=128, c=document.createElement('canvas'); c.width=c.height=sz;
+  const ctx=c.getContext('2d');
+  ctx.fillStyle='#d8c078'; ctx.fillRect(0,0,sz,sz);
+  const pg=ctx.createLinearGradient(0,0,sz,0);
+  pg.addColorStop(0,'rgba(200,175,100,0)'); pg.addColorStop(.5,'rgba(235,215,160,.8)'); pg.addColorStop(1,'rgba(200,175,100,0)');
+  ctx.fillStyle=pg; ctx.fillRect(0,0,sz,sz);
+  const t=new THREE.CanvasTexture(c); t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(1, Math.ceil(pathTotalLength/2));
+
+  pathMesh = new THREE.Mesh(geo, new THREE.MeshLambertMaterial({map:t, color:0xe8d898, side:THREE.DoubleSide}));
+  pathMesh.receiveShadow = true;
+  scene.add(pathMesh);
+}
+
+// Point de vue par défaut quand aucun parcours n'est chargé
+// Se centre automatiquement sur le bâti ou les POI si présents
+let defaultViewCenter = new THREE.Vector3(0, 0, 0);
+function updateDefaultViewCenter() {
+  const pts = [];
+  buildingMeshes.forEach(m => pts.push(m.position));
+  poiObjects.forEach(o => pts.push(o.marker.position));
+  if (pts.length === 0) return;
+  const cx = pts.reduce((s,p)=>s+p.x,0)/pts.length;
+  const cz = pts.reduce((s,p)=>s+p.z,0)/pts.length;
+  defaultViewCenter.set(cx, getAltAt(cx,cz), cz);
+}
+
+function getPosOnPath(t01) {
+  if (pathPoints.length < 2) {
+    return new THREE.Vector3(
+      defaultViewCenter.x,
+      getAltAt(defaultViewCenter.x, defaultViewCenter.z) + 0.08,
+      defaultViewCenter.z
+    );
+  }
+  const target = t01 * pathTotalLength;
+  let acc = 0;
+  for (let i=1; i<pathPoints.length; i++){
+    const seg = pathPoints[i].distanceTo(pathPoints[i-1]);
+    if (acc+seg >= target){
+      const u = (target-acc)/seg;
+      // Interpolation directe — Y déjà calé sur le terrain dans buildPath
+      return new THREE.Vector3().lerpVectors(pathPoints[i-1], pathPoints[i], u);
+    }
+    acc += seg;
+  }
+  return pathPoints[pathPoints.length-1].clone();
+}
+
+function getDirOnPath(t01) {
+  if (pathPoints.length < 2) return new THREE.Vector3(0,0,-1);
+  const a = getPosOnPath(Math.max(0,   t01-0.004));
+  const b = getPosOnPath(Math.min(1,   t01+0.004));
+  return b.clone().sub(a).normalize();
+}
+
+// ══════════════════════════════════════════════════════════
+// BÂTI EXTRUDÉ
+// ══════════════════════════════════════════════════════════
+// Hauteur par défaut en mètres réels — convertie en unités scène dans le code
+const DEFAULT_HEIGHT_M = 4.5; // mètres réels
+const batiGroup = new THREE.Group();
+scene.add(batiGroup);
+
+function buildingWallMat(type) {
+  // Murs : couleur distincte par type, texture pierre en overlay léger
+  // On utilise deux passes : fond couleur + texture en multiply
+  const colors = {
+    'Religieux':   0xe8d090,  // or clair
+    'Monument':    0xddc878,  // or foncé
+    'Résidentiel': 0xc8a870,  // sable chaud
+    'Commercial':  0xb09050,  // brun
+    'Thermal':     0xa0b8c0,  // gris bleuté
+    'Funéraire':   0x808888,  // gris froid
+    'Artisanal':   0xb08840,  // ocre
+    'Spectacle':   0xd0b060,  // ambre
+  };
+  const c = colors[type] || 0xc8a868;
+  // Matériau sans map — couleur pure bien distincte
+  return new THREE.MeshLambertMaterial({ color: c });
+}
+
+function buildingRoofMat(type) {
+  // Toit : couleur selon type, texture légère
+  const roofColors = {
+    'Religieux':   0xc0a060,
+    'Funéraire':   0x908070,
+    'Thermal':     0xb0a878,
+  };
+  return new THREE.MeshLambertMaterial({
+    map: roofTex,
+    color: roofColors[type] || 0xb8985c,
+  });
+}
+
+function extrudePolygon(ring, height, props) {
+  const n = ring.length;
+  const cx = ring.reduce((s,p)=>s+p[0],0)/n;
+  const cz = ring.reduce((s,p)=>s+p[1],0)/n;
+  const groundY = getAltAt(cx, cz);
+  const floorY  = groundY;
+
+  const wallMat = buildingWallMat(props.type||'');
+  const rfMat   = buildingRoofMat(props.type||'');
+  const grp = new THREE.Group();
+
+  // ── Murs : BoxGeometry mince par arête ─────────────────
+  const WALL_THICK = 0.3; // 30cm d'épaisseur
+  for (let i=0; i<n; i++) {
+    const j = (i+1)%n;
+    const x0=ring[i][0], z0=ring[i][1];
+    const x1=ring[j][0], z1=ring[j][1];
+    const segLen = Math.sqrt((x1-x0)**2+(z1-z0)**2);
+    if (segLen < 0.01) continue;
+
+    const geo = new THREE.BoxGeometry(segLen, height, WALL_THICK);
+    const mx  = (x0+x1)/2;
+    const mz  = (z0+z1)/2;
+    // Box a sa longueur sur X par défaut. On veut aligner cet axe X
+    // sur la direction du segment (x1-x0, z1-z0) dans le plan XZ.
+    // L'angle entre l'axe X du monde et la direction du segment :
+    const angle = -Math.atan2(z1-z0, x1-x0);
+
+    const mesh = new THREE.Mesh(geo, wallMat);
+    mesh.position.set(mx, floorY + height/2, mz);
+    mesh.rotation.y = angle;
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = {isBuilding:true, props};
+    grp.add(mesh);
+    buildingMeshes.push(mesh);
+  }
+
+  // ── Toit ───────────────────────────────────────────────
+  const roofVerts=[], roofIdx=[], roofUVs=[];
+  roofVerts.push(cx, floorY+height+0.05, cz); roofUVs.push(0.5,0.5);
+  for(let i=0;i<n;i++){
+    roofVerts.push(ring[i][0], floorY+height+0.05, ring[i][1]);
+    roofUVs.push((ring[i][0]-cx)/20+0.5, (ring[i][1]-cz)/20+0.5);
+  }
+  for(let i=0;i<n;i++) roofIdx.push(0, 1+i, 1+(i+1)%n);
+  const roofGeo = new THREE.BufferGeometry();
+  roofGeo.setAttribute('position', new THREE.Float32BufferAttribute(roofVerts,3));
+  roofGeo.setAttribute('uv',       new THREE.Float32BufferAttribute(roofUVs,2));
+  roofGeo.setIndex(roofIdx);
+  roofGeo.computeVertexNormals();
+  const roofMesh = new THREE.Mesh(roofGeo, rfMat);
+  roofMesh.castShadow = true;
+  roofMesh.userData = {isBuilding:true, props};
+  grp.add(roofMesh);
+  buildingMeshes.push(roofMesh);
+
+  // ── Sol ────────────────────────────────────────────────
+  const floorVerts=[], floorIdx=[], floorUVs=[];
+  floorVerts.push(cx, floorY+0.02, cz); floorUVs.push(0.5,0.5);
+  for(let i=0;i<n;i++){
+    floorVerts.push(ring[i][0], floorY+0.02, ring[i][1]);
+    floorUVs.push((ring[i][0]-cx)/20+0.5, (ring[i][1]-cz)/20+0.5);
+  }
+  for(let i=0;i<n;i++) floorIdx.push(0, 1+(i+1)%n, 1+i);
+  const floorGeo = new THREE.BufferGeometry();
+  floorGeo.setAttribute('position', new THREE.Float32BufferAttribute(floorVerts,3));
+  floorGeo.setAttribute('uv',       new THREE.Float32BufferAttribute(floorUVs,2));
+  floorGeo.setIndex(floorIdx);
+  floorGeo.computeVertexNormals();
+  grp.add(new THREE.Mesh(floorGeo, new THREE.MeshLambertMaterial({color:0x8a8060})));
+
+  batiGroup.add(grp);
+}
+
+// ══════════════════════════════════════════════════════════
+// AVATAR — point/silhouette qui matérialise la position
+// du marcheur, visible en vue aérienne et carte (pas en FPS)
+// ══════════════════════════════════════════════════════════
+let avatarGroup = null;
+
+function buildAvatar() {
+  avatarGroup = new THREE.Group();
+
+  // Corps : capsule simple (cylindre + sphère tête)
+  const bodyMat = new THREE.MeshLambertMaterial({ color: 0x2288ff });
+  const body = new THREE.Mesh(
+    new THREE.CylinderGeometry(0.25, 0.3, 1.4, 8),
+    bodyMat
+  );
+  body.position.y = 0.9;
+  body.castShadow = true;
+  avatarGroup.add(body);
+
+  const head = new THREE.Mesh(
+    new THREE.SphereGeometry(0.28, 10, 8),
+    bodyMat
+  );
+  head.position.y = 1.75;
+  head.castShadow = true;
+  avatarGroup.add(head);
+
+  // Flèche de direction au sol — indique vers où on regarde
+  const arrowShape = new THREE.Shape();
+  arrowShape.moveTo(0, 1.2);
+  arrowShape.lineTo(-0.35, 0.3);
+  arrowShape.lineTo(0, 0.55);
+  arrowShape.lineTo(0.35, 0.3);
+  arrowShape.lineTo(0, 1.2);
+  const arrowGeo = new THREE.ShapeGeometry(arrowShape);
+  arrowGeo.rotateX(-Math.PI/2);
+  const arrow = new THREE.Mesh(arrowGeo, new THREE.MeshBasicMaterial({
+    color: 0xffaa00, transparent: true, opacity: 0.9, side: THREE.DoubleSide
+  }));
+  arrow.position.y = 0.05;
+  avatarGroup.add(arrow);
+
+  // Halo au sol — repère visuel large, visible de loin
+  const haloGeo = new THREE.RingGeometry(0.6, 0.85, 24);
+  haloGeo.rotateX(-Math.PI/2);
+  const halo = new THREE.Mesh(haloGeo, new THREE.MeshBasicMaterial({
+    color: 0x2288ff, transparent: true, opacity: 0.5, side: THREE.DoubleSide
+  }));
+  halo.position.y = 0.04;
+  avatarGroup.add(halo);
+  avatarGroup.userData.halo = halo;
+  avatarGroup.userData.arrow = arrow;
+
+  scene.add(avatarGroup);
+}
+buildAvatar();
+
+function updateAvatar(camPos, camDir, currentView) {
+  if (!avatarGroup) return;
+  // Position au sol (sans la hauteur d'yeux)
+  const groundY = getAltAt(camPos.x, camPos.z);
+  avatarGroup.position.set(camPos.x, groundY, camPos.z);
+  // Oriente l'avatar dans la direction de marche
+  avatarGroup.rotation.y = Math.atan2(camDir.x, camDir.z);
+  // Visible seulement en vue aérienne et carte — pas en FPS (on serait dedans)
+  avatarGroup.visible = (currentView !== 'fps');
+  // Pulsation légère du halo pour le rendre repérable
+  const pulse = 0.85 + Math.sin(Date.now()*0.003)*0.15;
+  avatarGroup.userData.halo.scale.set(pulse, 1, pulse);
+}
+
+// ══════════════════════════════════════════════════════════
+// POIs
+// ══════════════════════════════════════════════════════════
+let poiObjects=[], poiData=[];
+// Rayon sphère POI = 2m réels, anneau = 5-8m réels
+const POI_R  = 2;
+const RING_R1 = 5;
+const RING_R2 = 8;
+const mGeo=new THREE.SphereGeometry(POI_R, 8, 8);
+const rBaseGeo=new THREE.RingGeometry(RING_R1, RING_R2, 20);
+rBaseGeo.rotateX(-Math.PI/2);
+
+function buildPOIMarkers(){
+  poiObjects.forEach(o=>{ scene.remove(o.marker); scene.remove(o.ring); });
+  poiObjects=[];
+  poiData.forEach(p=>{
+    const mat=new THREE.MeshBasicMaterial({color:0xffaa00});
+    const m=new THREE.Mesh(mGeo,mat);
+    m.position.set(p.x||0, (p.y||0) + 3, p.z); scene.add(m);
+    const rMat=new THREE.MeshBasicMaterial({color:0xffcc44,transparent:true,opacity:.4});
+    const r=new THREE.Mesh(rBaseGeo.clone(),rMat);
+    r.position.set(p.x||0, (p.y||0) + 0.2, p.z); scene.add(r);
+    poiObjects.push({marker:m, ring:r, mat, rMat, data:p});
+  });
+}
+
+// ══════════════════════════════════════════════════════════
+// CARTE 2D
+// ══════════════════════════════════════════════════════════
+const mapC=document.createElement('canvas'); mapC.width=mapC.height=512;
+const mCtx=mapC.getContext('2d');
+const mapTex2=new THREE.CanvasTexture(mapC);
+const mapMesh=new THREE.Mesh(
+  new THREE.PlaneGeometry(150,150),
+  new THREE.MeshBasicMaterial({map:mapTex2,transparent:true})
+);
+mapMesh.rotateX(-Math.PI/2); mapMesh.position.set(0,1,0); mapMesh.visible=false; scene.add(mapMesh);
+
+function drawMap(camPos, camDir){
+  mCtx.clearRect(0,0,512,512);
+  const bg=mCtx.createRadialGradient(256,256,0,256,256,280);
+  bg.addColorStop(0,'#f2e0b4'); bg.addColorStop(1,'#d8c08a');
+  mCtx.fillStyle=bg; mCtx.fillRect(0,0,512,512);
+
+  // Parcours
+  if(pathPoints.length>1){
+    const scl=1.2;
+    mCtx.strokeStyle='#c8a255'; mCtx.lineWidth=7;
+    mCtx.beginPath();
+    pathPoints.forEach((p,i)=>{
+      const px=256+p.x*scl, py=256+p.z*scl;
+      i===0?mCtx.moveTo(px,py):mCtx.lineTo(px,py);
+    });
+    mCtx.stroke();
+    mCtx.strokeStyle='#e4c878'; mCtx.lineWidth=3;
+    mCtx.beginPath();
+    pathPoints.forEach((p,i)=>{
+      const px=256+p.x*scl, py=256+p.z*scl;
+      i===0?mCtx.moveTo(px,py):mCtx.lineTo(px,py);
+    });
+    mCtx.stroke();
+  }
+
+  // POIs
+  const scl=1.2;
+  poiData.forEach(p=>{
+    const px=256+(p.x||0)*scl, py=256+p.z*scl;
+    mCtx.beginPath(); mCtx.arc(px,py,9,0,Math.PI*2);
+    mCtx.fillStyle='#e07020'; mCtx.fill();
+    mCtx.strokeStyle='#804010'; mCtx.lineWidth=2; mCtx.stroke();
+    mCtx.fillStyle='#1a0800'; mCtx.font='bold 11px sans-serif';
+    mCtx.fillText(p.name, px+12, py+4);
+  });
+
+  // Avatar — position + flèche de direction
+  const cx=256+camPos.x*scl, cy=256+camPos.z*scl;
+  if (camDir) {
+    const ang = Math.atan2(camDir.x, camDir.z);
+    const fx = cx + Math.sin(ang)*16, fy = cy + Math.cos(ang)*16;
+    mCtx.strokeStyle='#2288ff'; mCtx.lineWidth=3; mCtx.lineCap='round';
+    mCtx.beginPath(); mCtx.moveTo(cx,cy); mCtx.lineTo(fx,fy); mCtx.stroke();
+    // Pointe de flèche
+    const a1=ang+2.5, a2=ang-2.5;
+    mCtx.beginPath();
+    mCtx.moveTo(fx,fy);
+    mCtx.lineTo(fx+Math.sin(a1)*6, fy+Math.cos(a1)*6);
+    mCtx.lineTo(fx+Math.sin(a2)*6, fy+Math.cos(a2)*6);
+    mCtx.closePath(); mCtx.fillStyle='#2288ff'; mCtx.fill();
+  }
+  mCtx.beginPath(); mCtx.arc(cx,cy,8,0,Math.PI*2);
+  mCtx.fillStyle='#2288ff'; mCtx.fill();
+  mCtx.strokeStyle='#fff'; mCtx.lineWidth=2.5; mCtx.stroke();
+}
+
+// ══════════════════════════════════════════════════════════
+// LOADER GEOTIFF
+// ══════════════════════════════════════════════════════════
+function showLoader(msg){ document.getElementById('loader-text').textContent=msg; document.getElementById('loader').classList.add('visible'); }
+function hideLoader(){ document.getElementById('loader').classList.remove('visible'); }
+function sigStatus(msg,ok=true){ const el=document.getElementById('sig-status'); el.style.color=ok?'rgba(100,255,140,.85)':'rgba(255,120,100,.85)'; el.textContent=msg; }
+function markLoaded(id){ document.getElementById(id).classList.add('loaded'); }
+
+function dismissEmpty(){
+  const s=document.getElementById('empty-screen');
+  s.classList.add('hidden');
+  setTimeout(()=>s.style.display='none',900);
+}
+
+async function loadGeoTIFF(input) {
+  const file=input.files[0]; if(!file) return;
+  showLoader('Lecture du GeoTIFF…');
+  sigStatus('⏳ Lecture MNT…');
+  try {
+    const buf  = await file.arrayBuffer();
+    showLoader('Décodage raster…');
+    const tiff  = await GeoTIFF.fromArrayBuffer(buf);
+    const image = await tiff.getImage();
+    const bbox  = image.getBoundingBox(); // [minE,minN,maxE,maxN]
+    const imgW  = image.getWidth();
+    const imgH  = image.getHeight();
+    const [minE,minN,maxE,maxN] = bbox;
+    console.log('GeoTIFF bbox UTM:', {minE,minN,maxE,maxN});
+    console.log('Image size:', imgW, '×', imgH);
+
+    // Fixe le référentiel sur le coin SW du MNT
+    setOrigin(minE, minN);
+
+    showLoader('Extraction des altitudes…');
+    const rasters = await image.readRasters({ interleave:true });
+    let minAlt=Infinity, maxAlt=-Infinity;
+    for(let i=0;i<rasters.length;i++){
+      const v=rasters[i];
+      if(isFinite(v)&&v>-9000){ if(v<minAlt)minAlt=v; if(v>maxAlt)maxAlt=v; }
+    }
+
+    // ── Lissage Gaussien 3×3 (atténue les marches d'escalier du MNT 30m) ──
+    showLoader('Lissage du MNT…');
+    await new Promise(r=>setTimeout(r,20));
+    function gaussSmooth(data, w, h, passes=3) {
+      // Noyau Gaussien 3×3 : [1,2,1 / 2,4,2 / 1,2,1] / 16
+      const K = [1,2,1, 2,4,2, 1,2,1];
+      let d = Float32Array.from(data);
+      for (let p=0; p<passes; p++) {
+        const out = new Float32Array(d.length);
+        for (let y=0; y<h; y++) {
+          for (let x=0; x<w; x++) {
+            let sum=0, wsum=0, ki=0;
+            for (let dy=-1; dy<=1; dy++) {
+              for (let dx=-1; dx<=1; dx++) {
+                const nx=x+dx, ny=y+dy;
+                const w2 = K[ki++];
+                if (nx>=0&&nx<w&&ny>=0&&ny<h) {
+                  const v=d[ny*w+nx];
+                  if (isFinite(v)&&v>-9000) { sum+=v*w2; wsum+=w2; }
+                }
+              }
+            }
+            out[y*w+x] = wsum>0 ? sum/wsum : d[y*w+x];
+          }
+        }
+        d = out;
+      }
+      return d;
+    }
+    const smoothed = gaussSmooth(rasters, imgW, imgH, 3);
+
+    // ── Suréchantillonnage bilinéaire ×4 (88×48 → 352×192) ──
+    showLoader('Suréchantillonnage ×4…');
+    await new Promise(r=>setTimeout(r,20));
+    function upsample(data, w, h, scale) {
+      const nw = Math.round(w*scale), nh = Math.round(h*scale);
+      const out = new Float32Array(nw*nh);
+      for (let y=0; y<nh; y++) {
+        for (let x=0; x<nw; x++) {
+          const fx = (x/(nw-1))*(w-1), fy = (y/(nh-1))*(h-1);
+          const x0=Math.floor(fx), x1=Math.min(w-1,x0+1);
+          const y0=Math.floor(fy), y1=Math.min(h-1,y0+1);
+          const tx=fx-x0, ty=fy-y0;
+          const v00=data[y0*w+x0], v10=data[y0*w+x1];
+          const v01=data[y1*w+x0], v11=data[y1*w+x1];
+          out[y*nw+x] = v00*(1-tx)*(1-ty)+v10*tx*(1-ty)+v01*(1-tx)*ty+v11*tx*ty;
+        }
+      }
+      return { data:out, w:nw, h:nh };
+    }
+    const up = upsample(smoothed, imgW, imgH, 4);
+    // Un 2e lissage léger après suréchantillonnage pour supprimer les artefacts
+    const finalData = gaussSmooth(up.data, up.w, up.h, 1);
+    const finalW = up.w, finalH = up.h;
+
+    // Recalcule min/max sur données lissées
+    let minAlt2=Infinity, maxAlt2=-Infinity;
+    for(let i=0;i<finalData.length;i++){
+      const v=finalData[i];
+      if(isFinite(v)&&v>-9000){ if(v<minAlt2)minAlt2=v; if(v>maxAlt2)maxAlt2=v; }
+    }
+
+    const scSW = utmToScene(minE, minN);
+    const scNE = utmToScene(maxE, maxN);
+    const ext  = { minX:scSW.x, maxX:scNE.x, minZ:scNE.z, maxZ:scSW.z };
+    console.log('Emprise scène:', ext);
+    console.log('Centre scène: cx=', (ext.minX+ext.maxX)/2, 'cz=', (ext.minZ+ext.maxZ)/2);
+
+    showLoader('Construction du terrain 3D…');
+    await new Promise(r=>setTimeout(r,30));
+    buildTerrainFromRaster(finalW, finalH, finalData, minAlt2, maxAlt2, ext);
+    revealSky();
+    dismissEmpty();
+
+    // Adapte le frustum des caméras à l'emprise
+    const diag = Math.sqrt((ext.maxX-ext.minX)**2+(ext.maxZ-ext.minZ)**2);
+    aerialCam.far = diag * 4; aerialCam.updateProjectionMatrix();
+    fpsCam.far    = Math.max(5000, diag * 2); fpsCam.updateProjectionMatrix();
+    sun.shadow.camera.left   = -diag * 0.6; sun.shadow.camera.right = diag * 0.6;
+    sun.shadow.camera.top    =  diag * 0.6; sun.shadow.camera.bottom = -diag * 0.6;
+    sun.shadow.camera.far    = diag * 3;    sun.shadow.needsUpdate = true;
+    // Recentre mapCam sur l'emprise du terrain
+    const halfW = (ext.maxX - ext.minX) / 2 * 1.1;
+    const halfH = (ext.maxZ - ext.minZ) / 2 * 1.1;
+    mapCam.left = -halfW; mapCam.right = halfW;
+    mapCam.top  =  halfH; mapCam.bottom = -halfH;
+    mapCam.updateProjectionMatrix();
+
+    sigStatus(`✓ MNT chargé\nSource: ${imgW}×${imgH} px (${Math.round((maxE-minE)/imgW)}m/px)\nTraité: ${finalW}×${finalH} px | ${Math.round(minAlt2)}–${Math.round(maxAlt2)} m\nEmprise ${Math.round((maxE-minE)/1000)}×${Math.round((maxN-minN)/1000)} km`);
+    markLoaded('btn-tif');
+    document.getElementById('story-chapter').textContent='MNT chargé — ajoutez le parcours et les couches';
+
+    // Si parcours ou POI déjà chargés avant le MNT → les recaler sur le terrain
+    if (pathPoints.length > 1) {
+      buildPath(pathPoints); // buildPath recalcule getAltAt pour chaque point
+      sigStatus(document.getElementById('sig-status').textContent + '\n(parcours recalé)');
+    }
+    if (poiData.length > 0) {
+      poiData.forEach(p => { p.y = getAltAt(p.x, p.z); });
+      buildPOIMarkers();
+    }
+
+    hideLoader();
+  } catch(err) {
+    hideLoader();
+    sigStatus('✗ MNT: '+err.message, false);
+    console.error(err);
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// CHARGEURS GEOJSON
+// ══════════════════════════════════════════════════════════
+function loadParcours(input){
+  const file=input.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const g=JSON.parse(e.target.result);
+      let coords=[];
+      if(g.type==='FeatureCollection') g.features.forEach(f=>{ if(f.geometry&&f.geometry.type==='LineString') coords=f.geometry.coordinates; });
+      else if(g.type==='Feature'&&g.geometry.type==='LineString') coords=g.geometry.coordinates;
+      if(!coords.length) throw new Error('Aucune LineString trouvée');
+      if(!geoOrigin){ const c=coords[0]; if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]); else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);} }
+      pathPoints=coords.map(c=>{ const s=anyToScene(c[0],c[1]); const y=getAltAt(s.x,s.z)+0.2; return new THREE.Vector3(s.x,y,s.z); });
+      buildPath(pathPoints);
+      pathT=0;
+      dismissEmpty();
+      sigStatus('✓ Parcours: '+coords.length+' points\nLongueur: '+Math.round(pathTotalLength)+'m');
+      markLoaded('btn-parcours');
+      document.getElementById('story-chapter').textContent='Parcours chargé — appuyez sur Marcher';
+    }catch(err){sigStatus('✗ Parcours: '+err.message,false);}
+  };
+  r.readAsText(file);
+}
+
+function loadPOI(input){
+  const file=input.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const g=JSON.parse(e.target.result);
+      if(!geoOrigin&&g.features.length){
+        const c=g.features[0].geometry.coordinates;
+        if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]); else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);}
+      }
+      poiData=g.features.map(f=>{
+        const c=f.geometry.coordinates, s=anyToScene(c[0],c[1]);
+        const y=getAltAt(s.x,s.z);
+        return {
+          name:      f.properties.name||'Point',
+          desc:      f.properties.description||f.properties.desc||'',
+          audio_text:f.properties.audio_text||f.properties.description||'',
+          x: s.x, z: s.z, y,
+          props: f.properties
+        };
+      });
+      buildPOIMarkers();
+      narratives.length=0;
+      poiData.forEach(p=>{ if(p.audio_text) narratives.push({z:p.z-3,done:false,text:p.audio_text}); });
+      narratives.sort((a,b)=>a.z-b.z);
+      sigStatus('✓ '+poiData.length+' POI chargés');
+      markLoaded('btn-poi');
+      updateDefaultViewCenter();
+    }catch(err){sigStatus('✗ POI: '+err.message,false);}
+  };
+  r.readAsText(file);
+}
+
+function loadBati(input){
+  const file=input.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const g=JSON.parse(e.target.result);
+      if(g.type!=='FeatureCollection') throw new Error('Pas une FeatureCollection');
+      // Vider l'ancien bâti
+      while(batiGroup.children.length) batiGroup.remove(batiGroup.children[0]);
+      buildingMeshes=[];
+      let count=0;
+      g.features.forEach(f=>{
+        if(!f.geometry) return;
+        let rings=[];
+        if(f.geometry.type==='Polygon') rings=[f.geometry.coordinates[0]];
+        else if(f.geometry.type==='MultiPolygon') f.geometry.coordinates.forEach(poly=>rings.push(poly[0]));
+        rings.forEach(ring=>{
+          if(!geoOrigin){ const c=ring[0]; if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]); else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);} }
+          const sr=ring.slice(0,-1).map(c=>{ const s=anyToScene(c[0],c[1]); return [s.x,s.z]; });
+          if(sr.length<3) return;
+          const props=Object.assign({name:'Bâtiment'},f.properties||{});
+          const hM = parseFloat(props.height||props.hauteur||(props['building:levels']&&props['building:levels']*3.2)||DEFAULT_HEIGHT_M)||DEFAULT_HEIGHT_M;
+          extrudePolygon(sr, hM, props);
+          count++;
+        });
+      });
+      sigStatus('✓ '+count+' bâtiments extrudés');
+      markLoaded('btn-bati');
+      updateDefaultViewCenter();
+    }catch(err){sigStatus('✗ Bâti: '+err.message,false);}
+  };
+  r.readAsText(file);
+}
+
+// ══════════════════════════════════════════════════════════
+// OCCUPATION DU SOL
+// ══════════════════════════════════════════════════════════
+
+// Table de correspondance codes → type normalisé
+// Compatible CLC (Corine Land Cover), OSM, IGN, ou codes libres
+const OS_TYPE_MAP = {
+  // Codes libres (ton GeoJSON)
+  'foret':         'foret',
+  'forêt':         'foret',
+  'forest':        'foret',
+  'bois':          'foret',
+  'foret_claire':  'foret_claire',
+  'prairie':       'prairie',
+  'herbe':         'prairie',
+  'grass':         'prairie',
+  'culture':       'culture',
+  'agricole':      'culture',
+  'agricultural':  'culture',
+  'urbain':        'urbain',
+  'urban':         'urbain',
+  'residential':   'urbain',
+  'industriel':    'urbain',
+  'eau':           'eau',
+  'water':         'eau',
+  'lac':           'eau',
+  'riviere':       'eau',
+  'river':         'eau',
+  'sable':         'sable',
+  'desert':        'sable',
+  'roche':         'roche',
+  'rock':          'roche',
+  'bare':          'roche',
+
+  // OSM landuse
+  'farmland':      'culture',
+  'farmyard':      'culture',
+  'orchard':       'culture',
+  'vineyard':      'culture',
+  'allotments':    'culture',
+  'meadow':        'prairie',
+  'greenfield':    'prairie',
+  'grass':         'prairie',
+  'park':          'prairie',
+  'garden':        'prairie',
+  'recreation_ground': 'prairie',
+  'cemetery':      'roche',
+  'quarry':        'roche',
+  'brownfield':    'roche',
+  'industrial':    'urbain',
+  'commercial':    'urbain',
+  'retail':        'urbain',
+  'construction':  'urbain',
+  'military':      'urbain',
+  'railway':       'urbain',
+  'forest':        'foret',
+  'wood':          'foret',
+
+  // OSM natural
+  'wood':          'foret',
+  'scrub':         'foret_claire',
+  'heath':         'foret_claire',
+  'grassland':     'prairie',
+  'wetland':       'eau',
+  'water':         'eau',
+  'reservoir':     'eau',
+  'bay':           'eau',
+  'beach':         'sable',
+  'sand':          'sable',
+  'dune':          'sable',
+  'bare_rock':     'roche',
+  'scree':         'roche',
+  'cliff':         'roche',
+  'glacier':       'roche',
+
+  // OSM leisure
+  'nature_reserve':'foret_claire',
+  'golf_course':   'prairie',
+  'pitch':         'prairie',
+
+  // ESA WorldCover (codes numériques)
+  '10':  'foret',        // Tree cover
+  '20':  'foret_claire', // Shrubland
+  '30':  'prairie',      // Grassland
+  '40':  'culture',      // Cropland
+  '50':  'urbain',       // Built-up
+  '60':  'roche',        // Bare/sparse vegetation
+  '70':  'roche',        // Snow/ice
+  '80':  'eau',          // Permanent water bodies
+  '90':  'prairie',      // Herbaceous wetland
+  '95':  'foret',        // Mangrove
+  '100': 'sable',        // Moss/lichen
+
+  // Codes CLC (Corine Land Cover) numériques
+  '111':'urbain','112':'urbain','121':'urbain','122':'urbain',
+  '123':'urbain','124':'urbain','131':'roche','132':'roche',
+  '141':'prairie','142':'prairie',
+  '211':'culture','212':'culture','213':'culture',
+  '221':'culture','222':'culture','223':'culture',
+  '231':'prairie','241':'culture','242':'culture','243':'culture',
+  '311':'foret','312':'foret','313':'foret',
+  '321':'prairie','322':'roche','323':'prairie','324':'foret_claire',
+  '331':'sable','332':'roche','333':'roche','334':'roche','335':'roche',
+  '411':'eau','412':'eau','421':'eau','422':'eau','423':'eau',
+  '511':'eau','512':'eau','521':'eau','522':'eau','523':'eau',
+};
+
+// Paramètres visuels par type
+const OS_STYLE = {
+  foret:       { groundColor:'#3d6b35', treeColor:0x2d5a27, treeDensity:0.008, treeH:[4,10],  treeR:[1.2,2.5] },
+  foret_claire:{ groundColor:'#5a8c4a', treeColor:0x4a7a3a, treeDensity:0.003, treeH:[3,8],   treeR:[0.8,2.0] },
+  prairie:     { groundColor:'#7ab552', treeColor:null,      treeDensity:0 },
+  culture:     { groundColor:'#c4a35a', treeColor:null,      treeDensity:0 },
+  urbain:      { groundColor:'#8a8a8a', treeColor:null,      treeDensity:0 },
+  eau:         { groundColor:'#3a7abf', treeColor:null,      treeDensity:0 },
+  sable:       { groundColor:'#d4b87a', treeColor:null,      treeDensity:0 },
+  roche:       { groundColor:'#8a7a6a', treeColor:null,      treeDensity:0 },
+};
+
+// Géométries partagées pour les arbres (InstancedMesh)
+const TRUNK_GEO = new THREE.CylinderGeometry(0.15, 0.22, 1, 5);
+const CONE_GEO  = new THREE.ConeGeometry(1, 1, 6);
+const BALL_GEO  = new THREE.SphereGeometry(1, 5, 4);
+const TRUNK_MAT = new THREE.MeshLambertMaterial({color:0x5a3a1a});
+
+function plantTrees(ring, style) {
+  if (!style.treeColor || !style.treeDensity) return;
+
+  const xs=ring.map(p=>p[0]), zs=ring.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs);
+  const minZ=Math.min(...zs), maxZ=Math.max(...zs);
+  const area = (maxX-minX) * (maxZ-minZ);
+
+  // Cap absolu : max 300 arbres par zone quelle que soit la surface
+  const count = Math.min(300, Math.max(5, Math.floor(area * style.treeDensity)));
+
+  // InstancedMesh : 1 draw call pour tous les troncs, 1 pour toutes les feuilles
+  const trunkInst = new THREE.InstancedMesh(TRUNK_GEO, TRUNK_MAT, count);
+  const leafMat   = new THREE.MeshLambertMaterial({color:style.treeColor});
+  const leafInst  = new THREE.InstancedMesh(Math.random()>0.5?CONE_GEO:BALL_GEO, leafMat, count);
+  trunkInst.castShadow = leafInst.castShadow = true;
+
+  const dummy = new THREE.Object3D();
+  let placed = 0;
+
+  for (let attempts=0; attempts<count*5 && placed<count; attempts++) {
+    const tx = minX + Math.random()*(maxX-minX);
+    const tz = minZ + Math.random()*(maxZ-minZ);
+    if (!pointInPolygon(tx, tz, ring)) continue;
+
+    const ty = getAltAt(tx, tz);
+    const h  = style.treeH[0] + Math.random()*(style.treeH[1]-style.treeH[0]);
+    const r  = style.treeR[0] + Math.random()*(style.treeR[1]-style.treeR[0]);
+    const trunkH = h * 0.35;
+
+    // Tronc
+    dummy.position.set(tx, ty + trunkH/2, tz);
+    dummy.scale.set(1, trunkH, 1);
+    dummy.updateMatrix();
+    trunkInst.setMatrixAt(placed, dummy.matrix);
+
+    // Feuillage
+    dummy.position.set(tx, ty + trunkH + h*0.35, tz);
+    dummy.scale.set(r, h*0.65, r);
+    dummy.rotation.y = Math.random()*Math.PI*2;
+    dummy.updateMatrix();
+    leafInst.setMatrixAt(placed, dummy.matrix);
+
+    placed++;
+  }
+
+  // Ajuste le count réel
+  trunkInst.count = leafInst.count = placed;
+  if (placed > 0) {
+    osGroup.add(trunkInst);
+    osGroup.add(leafInst);
+  }
+}
+
+// Groupe Three.js pour tous les objets OS
+let osGroup = new THREE.Group();
+scene.add(osGroup);
+
+// Canvas de texture terrain OS (peint par zone)
+let osTexCanvas = null;
+let osTexture   = null;
+
+function normalizeOSType(props) {
+  // Cherche dans tous les champs possibles, dans l'ordre de priorité
+  const candidates = [
+    props.type, props.code, props.classe,
+    props.CLC_CODE, props.CODE_18, props.CODE_12,
+    props.landuse, props.natural, props.leisure,
+    props.fclass, props.CLASSE, props.NATURE,
+    // ESA WorldCover
+    props.Map_code, props.map_code,
+  ];
+  for (const raw of candidates) {
+    if (!raw) continue;
+    const k = String(raw).toLowerCase().trim();
+    if (OS_TYPE_MAP[k]) return OS_TYPE_MAP[k];
+  }
+  return null;
+}
+
+// Teste si un point (px,pz) est dans un polygone scène [[x,z],...]
+function pointInPolygon(px, pz, ring) {
+  let inside = false;
+  for (let i=0, j=ring.length-1; i<ring.length; j=i++) {
+    const xi=ring[i][0], zi=ring[i][1], xj=ring[j][0], zj=ring[j][1];
+    if (((zi>pz)!==(zj>pz)) && (px < (xj-xi)*(pz-zi)/(zj-zi)+xi)) inside=!inside;
+  }
+  return inside;
+}
+
+// Plan d'eau animé
+function makeWaterPlane(ring) {
+  const xs=ring.map(p=>p[0]), zs=ring.map(p=>p[1]);
+  const minX=Math.min(...xs), maxX=Math.max(...xs);
+  const minZ=Math.min(...zs), maxZ=Math.max(...zs);
+  const cx=(minX+maxX)/2, cz=(minZ+maxZ)/2;
+  const avgAlt = getAltAt(cx,cz)+0.02;
+
+  const geo = new THREE.PlaneGeometry(maxX-minX, maxZ-minZ, 4, 4);
+  geo.rotateX(-Math.PI/2);
+  const mat = new THREE.MeshLambertMaterial({
+    color:0x3a7abf, transparent:true, opacity:0.75
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.position.set(cx, avgAlt, cz);
+  mesh.userData.isWater = true;
+  osGroup.add(mesh);
+}
+
+// Texture terrain OS — rasterise les polygones sur un canvas
+function buildOSTexture(features, extScene) {
+  const sz = 512;
+  if (!osTexCanvas) { osTexCanvas=document.createElement('canvas'); osTexCanvas.width=osTexCanvas.height=sz; }
+  const ctx = osTexCanvas.getContext('2d');
+  // Fond sable par défaut
+  ctx.fillStyle='#d4b87a'; ctx.fillRect(0,0,sz,sz);
+
+  const sx = extScene.maxX - extScene.minX || 1;
+  const sz2= extScene.maxZ - extScene.minZ || 1;
+
+  function sceneToCanvas(x,z) {
+    return [
+      ((x-extScene.minX)/sx)*sz,
+      ((z-extScene.minZ)/sz2)*sz
+    ];
+  }
+
+  features.forEach(f=>{
+    const type = normalizeOSType(f.properties);
+    const style = type ? OS_STYLE[type] : null;
+    if (!style) return;
+
+    const rings = f.geometry.type==='Polygon'
+      ? [f.geometry.coordinates[0]]
+      : f.geometry.type==='MultiPolygon'
+        ? f.geometry.coordinates.map(p=>p[0])
+        : [];
+
+    rings.forEach(ring=>{
+      ctx.beginPath();
+      ring.forEach((c,i)=>{
+        const sc = anyToScene(c[0],c[1]);
+        const [cx2,cz2] = sceneToCanvas(sc.x,sc.z);
+        i===0?ctx.moveTo(cx2,cz2):ctx.lineTo(cx2,cz2);
+      });
+      ctx.closePath();
+      ctx.fillStyle = style.groundColor;
+      ctx.fill();
+    });
+  });
+
+  if (osTexture) osTexture.dispose();
+  osTexture = new THREE.CanvasTexture(osTexCanvas);
+  osTexture.wrapS = osTexture.wrapT = THREE.ClampToEdgeWrapping;
+
+  // Applique uniquement si pas de satellite chargé
+  applyTerrainTexture();
+}
+
+function loadOS(input) {
+  const file=input.files[0]; if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    try{
+      const g=JSON.parse(e.target.result);
+      if(g.type!=='FeatureCollection') throw new Error('Pas une FeatureCollection');
+
+      // Vider les anciens objets OS
+      while(osGroup.children.length) osGroup.remove(osGroup.children[0]);
+
+      // Fixe l'origine si besoin
+      if(!geoOrigin && g.features.length){
+        const c=g.features[0].geometry.coordinates[0][0];
+        if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]); else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);}
+      }
+
+      // Calcule l'emprise scène des features OS
+      let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+      const converted = g.features.map(f=>{
+        if(!f.geometry) return null;
+        const rings = f.geometry.type==='Polygon'
+          ? [f.geometry.coordinates[0]]
+          : f.geometry.type==='MultiPolygon'
+            ? f.geometry.coordinates.map(p=>p[0])
+            : [];
+        const scRings = rings.map(ring=>ring.map(c=>{
+          const s=anyToScene(c[0],c[1]);
+          if(s.x<minX)minX=s.x; if(s.x>maxX)maxX=s.x;
+          if(s.z<minZ)minZ=s.z; if(s.z>maxZ)maxZ=s.z;
+          return [s.x,s.z];
+        }));
+        return { properties:f.properties, geometry:{ type:f.geometry.type, coordinates:scRings } };
+      }).filter(Boolean);
+
+      const extScene = { minX, maxX, minZ, maxZ };
+
+      // 1. Texture terrain
+      buildOSTexture(converted, extScene);
+
+      // 2. Objets 3D par zone
+      let treesCount=0, waterCount=0;
+      converted.forEach(f=>{
+        const raw = f.properties.type||f.properties.code||f.properties.classe||f.properties.CLC_CODE||f.properties.CODE_18;
+        const type = normalizeOSType(f.properties);
+        const style = type ? OS_STYLE[type] : null;
+        if (!style) return;
+
+        f.geometry.coordinates.forEach(ring=>{
+          if (type==='eau'){ makeWaterPlane(ring); waterCount++; }
+          else if (style.treeColor){ plantTrees(ring, style); treesCount++; }
+        });
+      });
+
+      sigStatus(`✓ OS chargée\n${converted.length} zones\n${treesCount} zones arborées\n${waterCount} plans d'eau`);
+      markLoaded('btn-os');
+    }catch(err){sigStatus('✗ OS: '+err.message,false); console.error(err);}
+  };
+  r.readAsText(file);
+}
+
+// ══════════════════════════════════════════════════════════
+// TEXTURE SATELLITE (GeoTIFF RGB)
+// ══════════════════════════════════════════════════════════
+let satTexture = null;
+
+async function loadSatellite(input) {
+  const file = input.files[0]; if (!file) return;
+  showLoader('Lecture GeoTIFF satellite…');
+  sigStatus('⏳ Lecture satellite…');
+  try {
+    const buf   = await file.arrayBuffer();
+    showLoader('Décodage image…');
+    const tiff  = await GeoTIFF.fromArrayBuffer(buf);
+    const image = await tiff.getImage();
+
+    const bbox  = image.getBoundingBox(); // [minE, minN, maxE, maxN]
+    const imgW  = image.getWidth();
+    const imgH  = image.getHeight();
+    const [minE, minN, maxE, maxN] = bbox;
+    const nbBands = image.getSamplesPerPixel();
+
+    // Vérifie qu'on a bien une image couleur (3 ou 4 bandes)
+    if (nbBands < 3) throw new Error(`Image à ${nbBands} bande(s) — attendu RGB (3 bandes). Exportez en couleur depuis QGIS.`);
+
+    showLoader('Extraction RGB…');
+    await new Promise(r => setTimeout(r, 20));
+
+    // Lit les 3 bandes R, G, B séparément
+    const rasters = await image.readRasters({ interleave: false });
+    const R = rasters[0], G = rasters[1], B = rasters[2];
+
+    // Construit un canvas RGBA
+    const satCanvas = document.createElement('canvas');
+    satCanvas.width  = imgW;
+    satCanvas.height = imgH;
+    const ctx = satCanvas.getContext('2d');
+    const imgData = ctx.createImageData(imgW, imgH);
+    const d = imgData.data;
+
+    // Détermine si les valeurs sont uint8 (0-255) ou uint16 (0-65535)
+    const maxVal = Math.max(...Array.from(R.slice(0, 100)));
+    const scale  = maxVal > 255 ? 1/256 : 1; // normalise uint16 → uint8
+
+    for (let i = 0; i < imgW * imgH; i++) {
+      d[i*4]   = Math.min(255, Math.round(R[i] * scale));
+      d[i*4+1] = Math.min(255, Math.round(G[i] * scale));
+      d[i*4+2] = Math.min(255, Math.round(B[i] * scale));
+      d[i*4+3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    showLoader('Application sur le terrain…');
+    await new Promise(r => setTimeout(r, 20));
+
+    // Calcule l'emprise satellite en coordonnées scène
+    if (!geoOrigin) setOrigin(minE, minN);
+    const scSW = utmToScene(minE, minN);
+    const scNE = utmToScene(maxE, maxN);
+    const satExt = { minX: scSW.x, maxX: scNE.x, minZ: scNE.z, maxZ: scSW.z };
+
+    // Crée la texture Three.js
+    if (satTexture) satTexture.dispose();
+    satTexture = new THREE.CanvasTexture(satCanvas);
+    satTexture.wrapS = satTexture.wrapT = THREE.ClampToEdgeWrapping;
+    satTexture.minFilter = THREE.LinearFilter;
+    satTexture.magFilter = THREE.LinearFilter;
+
+    // Cale la texture sur l'emprise du terrain
+    if (terrainMesh) {
+      const terrExt = altGrid ? altGrid.ext : satExt;
+      const terrW = terrExt.maxX - terrExt.minX;
+      const terrH = terrExt.maxZ - terrExt.minZ;
+      const satW  = satExt.maxX  - satExt.minX;
+      const satH  = satExt.maxZ  - satExt.minZ;
+      satTexture.repeat.set(terrW / satW, terrH / satH);
+      satTexture.offset.set((terrExt.minX - satExt.minX) / satW, (terrExt.minZ - satExt.minZ) / satH);
+    }
+
+    // Applique via le gestionnaire — satellite prend la priorité sur OS
+    applyTerrainTexture();
+
+    const statusMsg = `✓ Satellite appliqué\n${imgW}×${imgH}px | ${nbBands} bandes\n`
+      + `Emprise: ${Math.round((maxE-minE)/1000)}×${Math.round((maxN-minN)/1000)}km`
+      + (osTexture ? '\n(OS visible en fallback si retiré)' : '');
+    sigStatus(statusMsg);
+
+    markLoaded('btn-sat');
+    hideLoader();
+
+  } catch(err) {
+    hideLoader();
+    sigStatus('✗ Satellite: ' + err.message, false);
+    console.error(err);
+  }
+}
+
+// Bouton pour revenir à la texture procédurale / OS
+function removeSatellite() {
+  if (!terrainMesh) return;
+  if (satTexture) { satTexture.dispose(); satTexture = null; }
+  applyTerrainTexture(); // revient à OS ou procédural
+  document.getElementById('btn-sat').classList.remove('loaded');
+  sigStatus('Satellite retiré — ' + (osTexture ? 'OS active' : 'texture procédurale'));
+}
+
+let narrAudio = null; // HTMLAudioElement pour MP3
+let narrPoints  = [];        // points de déclenchement chargés
+const DEFAULT_TRIGGER_RADIUS = 30;
+
+function narrRadiusToScene(meters) {
+  return meters; // SCENE_SCALE=1 donc 1m=1 unité
+}
+
+// ── Système narratif ──────────────────────────────────────
+// - On peut marcher librement même si une narration précédente joue encore.
+// - Dès qu'on ATTEINT physiquement un nouveau point B (même si A joue encore) :
+//     → la marche est bloquée immédiatement (figée sur B)
+//     → on attend que A se termine
+//     → B se lance automatiquement
+//     → la marche redevient possible tout de suite (le clic est actif)
+//     → B continue de jouer EN ARRIÈRE-PLAN pendant qu'on marche
+let currentNarr   = null; // narration dont l'audio joue actuellement (peut jouer pendant la marche)
+let pendingNarr   = null; // narration en attente, déclenchée dès que currentNarr se termine
+let blockedAtNarr = false;// true = la marche est figée (on attend la fin de la narration EN ATTENTE avant elle)
+
+function playNarration(n, blockUntilDone) {
+  // blockUntilDone=true  → la marche reste bloquée jusqu'à la fin de CETTE narration
+  //                         (cas du premier point ou quand il n'y avait rien avant)
+  // blockUntilDone=false → la marche est débloquée immédiatement, la narration joue en fond
+  //                         (cas d'un point atteint pendant qu'une précédente jouait encore)
+  currentNarr = n;
+  if (n.texte) showNarrative(n.texte, null);
+
+  if (!blockUntilDone) {
+    // Débloque la marche immédiatement — la narration continue en arrière-plan
+    unblockWalking();
+  }
+
+  const release = () => {
+    if (currentNarr === n) currentNarr = null;
+    // Si un point était en attente, on le lance maintenant sans bloquer
+    if (pendingNarr) {
+      const next = pendingNarr;
+      pendingNarr = null;
+      playNarration(next, false); // débloque dans playNarration via !blockUntilDone
+    } else {
+      // Plus rien en attente — débloque la marche si elle était bloquée
+      if (blockedAtNarr) unblockWalking();
+    }
+  };
+
+  if (n.audio_file && n.audioBlobURL) {
+    if (narrAudio) { narrAudio.pause(); narrAudio = null; }
+    narrAudio = new Audio(n.audioBlobURL);
+    narrAudio.onended = release;
+    narrAudio.onerror = () => { speak(n.audio_text || n.texte || ''); release(); };
+    narrAudio.play().catch(() => { speak(n.audio_text || n.texte || ''); release(); });
+  } else {
+    speakWithCallback(n.audio_text || n.texte || '', release);
+  }
+}
+
+function unblockWalking() {
+  blockedAtNarr = false;
+  document.getElementById('step-btn').classList.remove('blocked');
+  document.getElementById('step-btn').innerHTML = '▶ Marcher';
+}
+
+function blockWalking() {
+  blockedAtNarr = true;
+  isWalking = false;
+  document.getElementById('step-btn').style.background = 'rgba(255,210,140,.15)';
+  document.getElementById('step-btn').classList.add('blocked');
+  document.getElementById('step-btn').innerHTML = '⏸ Écoute en cours…';
+}
+
+function triggerNarration(n) {
+  if (n.played) return;
+  n.played = true;
+
+  if (currentNarr) {
+    // Une narration précédente joue encore — on bloque la marche
+    // et on met ce point en attente. Dès que la précédente finit,
+    // ce point se lancera avec blockUntilDone=false (marche débloquée immédiatement)
+    blockWalking();
+    pendingNarr = n;
+  } else {
+    // Rien ne joue — on lance directement SANS bloquer la marche
+    // La narration joue en arrière-plan, l'utilisateur peut continuer à avancer
+    playNarration(n, false);
+  }
+}
+
+// Vérifie la proximité à chaque frame (appelé dans animate)
+// Se déclenche même si une narration précédente est encore en train de jouer
+function checkNarrTriggers(camPos) {
+  if (blockedAtNarr) return; // déjà figé sur un point en attente — pas de nouveau check
+  for (const n of narrPoints) {
+    if (n.played) continue;
+    const dx = camPos.x - n.x;
+    const dz = camPos.z - n.z;
+    const dist = Math.sqrt(dx*dx + dz*dz);
+    if (dist <= n.radiusScene) {
+      triggerNarration(n);
+      break; // une seule par frame
+    }
+  }
+}
+
+// Coupe tout (utilisé au reset complet du parcours)
+function stopNarration() {
+  synth.cancel();
+  if (narrAudio) { narrAudio.pause(); narrAudio = null; }
+  currentNarr = null;
+  pendingNarr = null;
+  blockedAtNarr = false;
+  document.getElementById('step-btn').classList.remove('blocked');
+  document.getElementById('step-btn').innerHTML = '▶ Marcher';
+  document.getElementById('narrative-box').style.opacity = '0';
+}
+
+function loadNarrations(input) {
+  const file = input.files[0]; if (!file) return;
+  const r = new FileReader();
+  r.onload = e => {
+    try {
+      const g = JSON.parse(e.target.result);
+      if (g.type !== 'FeatureCollection') throw new Error('Pas une FeatureCollection');
+
+      if (!geoOrigin && g.features.length) {
+        const c = g.features[0].geometry.coordinates;
+        if (isUTM(c[0],c[1])) setOrigin(c[0],c[1]);
+        else { const m=wgs84ToUTM(c[0],c[1]); setOrigin(m.e,m.n); }
+      }
+
+      narrPoints = g.features
+        .filter(f => f.geometry && f.geometry.type === 'Point')
+        .map(f => {
+          const c  = f.geometry.coordinates;
+          const sc = anyToScene(c[0], c[1]);
+          const p  = f.properties || {};
+          const radiusM = parseFloat(p.trigger_radius || DEFAULT_TRIGGER_RADIUS);
+          return {
+            x:           sc.x,
+            z:           sc.z,
+            radiusScene: narrRadiusToScene(radiusM),
+            radiusM,
+            name:        p.name       || '',
+            texte:       p.texte      || p.text || p.description || '',
+            audio_text:  p.audio_text || p.texte || p.text || '',
+            audio_file:  p.audio_file || null,
+            audioBlobURL:null,          // rempli si MP3 chargé séparément
+            delai:       parseFloat(p.delai || 0),
+            categorie:   p.categorie  || '',
+            triggered:   false,
+          };
+        });
+
+      // Trie par distance croissante depuis le début du parcours
+      // (optionnel mais aide au debug)
+      if (pathPoints.length > 1) {
+        const start = pathPoints[0];
+        narrPoints.sort((a,b) => {
+          const da = Math.sqrt((a.x-start.x)**2+(a.z-start.z)**2);
+          const db = Math.sqrt((b.x-start.x)**2+(b.z-start.z)**2);
+          return da - db;
+        });
+      }
+
+      sigStatus(`✓ ${narrPoints.length} narrations chargées`);
+      markLoaded('btn-narr');
+
+      // Affiche les rayons de déclenchement en vue aérienne/carte (petits cercles)
+      narrPoints.forEach(n => {
+        const rGeo = new THREE.RingGeometry(
+          n.radiusScene - 0.05,
+          n.radiusScene,
+          24
+        );
+        rGeo.rotateX(-Math.PI/2);
+        const rMesh = new THREE.Mesh(
+          rGeo,
+          new THREE.MeshBasicMaterial({ color:0xff6600, transparent:true, opacity:0.4 })
+        );
+        rMesh.position.set(n.x, getAltAt(n.x,n.z)+0.15, n.z);
+        scene.add(rMesh);
+        n.debugMesh = rMesh;
+      });
+
+    } catch(err) {
+      sigStatus('✗ Narrations: ' + err.message, false);
+      console.error(err);
+    }
+  };
+  r.readAsText(file);
+}
+
+// ── Chargement fichiers audio MP3/WAV ─────────────────────
+// Association par nom de fichier : si audio_file="narration_01.mp3"
+// et qu'on charge un fichier nommé "narration_01.mp3", ils se matchent.
+let audioBlobs = {}; // { "narration_01.mp3": "blob:..." }
+
+function loadAudioFiles(input) {
+  const files = Array.from(input.files);
+  if (!files.length) return;
+  let loaded = 0;
+
+  files.forEach(file => {
+    // Libère l'ancien blob si existait
+    if (audioBlobs[file.name]) URL.revokeObjectURL(audioBlobs[file.name]);
+    audioBlobs[file.name] = URL.createObjectURL(file);
+    loaded++;
+
+    // Association immédiate avec les points narratifs existants
+    narrPoints.forEach(n => {
+      if (n.audio_file && matchAudioFile(n.audio_file, file.name)) {
+        n.audioBlobURL = audioBlobs[file.name];
+      }
+    });
+  });
+
+  sigStatus(`✓ ${loaded} fichier(s) audio chargé(s)\n${narrPoints.filter(n=>n.audioBlobURL).length}/${narrPoints.length} points associés`);
+  markLoaded('btn-audio');
+}
+
+// Matching flexible : "audio/narration_01.mp3" matche "narration_01.mp3"
+function matchAudioFile(audioFileProp, fileName) {
+  // Extrait le nom de fichier seul depuis un éventuel chemin
+  const propName = audioFileProp.split('/').pop().split('\\').pop();
+  return propName.toLowerCase() === fileName.toLowerCase();
+}
+
+// Si les narrations sont chargées APRÈS les audios, on réassocre
+function reAssociateAudio() {
+  narrPoints.forEach(n => {
+    if (n.audio_file && !n.audioBlobURL) {
+      const fileName = n.audio_file.split('/').pop().split('\\').pop();
+      if (audioBlobs[fileName]) n.audioBlobURL = audioBlobs[fileName];
+      else {
+        // Cherche sans tenir compte de la casse
+        const key = Object.keys(audioBlobs).find(k => k.toLowerCase() === fileName.toLowerCase());
+        if (key) n.audioBlobURL = audioBlobs[key];
+      }
+    }
+  });
+}
+
+
+function showAttr(props, sx, sy){
+  document.getElementById('attr-title').textContent=props.name||'Bâtiment';
+  const body=document.getElementById('attr-body'); body.innerHTML='';
+  const labels={type:'Type',epoque:'Époque',materiaux:'Matériaux',hauteur:'Hauteur',height:'Hauteur',note:'Note',description:'Description','building:levels':'Niveaux'};
+  Object.entries(props).forEach(([k,v])=>{
+    if(k==='name'||!v) return;
+    const row=document.createElement('div'); row.className='attr-row';
+    row.innerHTML='<span class="attr-key">'+(labels[k]||k)+'</span><span class="attr-val">'+v+'</span>';
+    body.appendChild(row);
+  });
+  const pw=255, ph=240;
+  let px=sx+14, py=sy-20;
+  if(px+pw>window.innerWidth-20) px=sx-pw-14;
+  if(py+ph>window.innerHeight-20) py=window.innerHeight-ph-20;
+  const pop=document.getElementById('attr-popup');
+  pop.style.left=px+'px'; pop.style.top=py+'px';
+  pop.classList.add('visible');
+}
+function closeAttr(){ document.getElementById('attr-popup').classList.remove('visible'); }
+
+canvas.addEventListener('click',e=>{
+  unlockSynth();
+  mouse.x=(e.clientX/window.innerWidth)*2-1;
+  mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,activeCamera);
+  const hits=raycaster.intersectObjects(buildingMeshes);
+  if(hits.length>0&&hits[0].object.userData.props) showAttr(hits[0].object.userData.props,e.clientX,e.clientY);
+  else closeAttr();
+});
+
+// ══════════════════════════════════════════════════════════
+// SPEECH
+// ══════════════════════════════════════════════════════════
+const synth=window.speechSynthesis; let voiceFR=null, muted=false;
+let synthUnlocked=false;
+let pendingSpeech=null; // texte en attente si synth pas encore débloqué
+
+function unlockSynth() {
+  if (synthUnlocked) return;
+  synthUnlocked = true;
+  // Utterance silencieuse pour débloquer le contexte (Chrome + Firefox)
+  const u = new SpeechSynthesisUtterance(' ');
+  u.volume = 0.01; u.rate = 2;
+  u.onend = () => {
+    // Si un texte attendait, le jouer maintenant
+    if (pendingSpeech) { const t=pendingSpeech; pendingSpeech=null; speak(t); }
+  };
+  try { synth.speak(u); } catch(e) {}
+}
+
+function loadVoices(){
+  const v=synth.getVoices();
+  voiceFR = v.find(x=>x.lang==='fr-FR'&&x.localService)
+          || v.find(x=>x.lang.startsWith('fr')&&x.localService)
+          || v.find(x=>x.lang==='fr-FR')
+          || v.find(x=>x.lang.startsWith('fr'))
+          || null;
+  // Liste les voix françaises disponibles en console pour diagnostic
+  const frVoices = v.filter(x=>x.lang.startsWith('fr'));
+  if (frVoices.length) {
+    console.log('Voix FR disponibles:', frVoices.map(x=>x.name+' ('+x.lang+(x.localService?', locale':', réseau')+')'));
+  } else {
+    console.warn('Aucune voix française détectée sur ce système — la lecture utilisera une voix par défaut potentiellement avec accent.');
+  }
+  populateVoiceSelect(frVoices);
+}
+
+function populateVoiceSelect(frVoices) {
+  const sel = document.getElementById('voice-select');
+  if (!sel || sel.dataset.populated === '1') return; // évite de repeupler à chaque appel de loadVoices
+  frVoices.forEach((v, i) => {
+    const opt = document.createElement('option');
+    opt.value = v.name;
+    opt.textContent = v.name.replace('Microsoft ', '').replace('Google ', '') + (v.localService ? '' : ' ☁');
+    sel.appendChild(opt);
+  });
+  if (frVoices.length) sel.dataset.populated = '1';
+}
+
+function setVoiceFromSelect(name) {
+  if (!name) { loadVoices(); return; } // "auto" → revient à la sélection automatique
+  const v = synth.getVoices().find(x => x.name === name);
+  if (v) voiceFR = v;
+}
+loadVoices();
+if(synth.onvoiceschanged!==undefined) synth.onvoiceschanged=loadVoices;
+
+function speak(t){
+  speakWithCallback(t, null);
+}
+
+function speakWithCallback(t, onDone){
+  if(muted||!synth||!t||!t.trim()){ if(onDone) onDone(); return; }
+  if(!synthUnlocked){
+    pendingSpeech = t; if(onDone) onDone(); return;
+  }
+  synth.cancel();
+  const u=new SpeechSynthesisUtterance(t);
+  u.lang='fr-FR'; u.rate=0.88; u.pitch=0.95;
+  if(voiceFR) u.voice=voiceFR;
+  if (onDone) {
+    u.onend   = onDone;
+    u.onerror = onDone;
+  }
+  try { synth.speak(u); } catch(e){ console.warn('speak error:',e); if(onDone) onDone(); }
+}
+
+function stopSpeaking(){
+  synth.cancel();
+  pendingSpeech = null;
+}
+
+function toggleMute(){
+  muted=!muted;
+  document.getElementById('mute-btn').textContent=muted?'🔇 Muet':'🔊 Son';
+  if(muted) synth.cancel();
+}
+
+let narTimer=null;
+// displayText = texte affiché à l'écran
+// audioText   = texte lu à voix haute (si null = pas de lecture auto)
+function showNarrative(displayText, audioText=undefined){
+  const box=document.getElementById('narrative-box');
+  document.getElementById('narrative-text').textContent=displayText;
+  box.style.opacity='1';
+  if(narTimer)clearTimeout(narTimer);
+  // audioText === undefined → pas de lecture (triggerNarration gère l'audio)
+  // audioText === null      → pas de lecture
+  // audioText === string    → lecture directe (utilisé par les POI narratifs)
+  if(audioText !== undefined && audioText !== null) speak(audioText);
+  narTimer=setTimeout(()=>{box.style.opacity='0';},13000);
+}
+
+const narratives=[];  // rempli depuis les POI GeoJSON (audio_text)
+
+// ══════════════════════════════════════════════════════════
+// STATE & CONTRÔLES
+// ══════════════════════════════════════════════════════════
+let bobPhase=0, isWalking=false, totalDist=0, frameCount=0, ended=false;
+pathT=0;
+
+function startWalking(){
+  if (ended || pathPoints.length<=1 || isWalking) return;
+  unlockSynth(); // débloque speechSynthesis au premier geste
+
+  // Bloqué uniquement si on est figé sur un point en attente d'une narration précédente.
+  // currentNarr peut être non-null (audio qui joue en fond) sans empêcher la marche.
+  if (blockedAtNarr) return;
+
+  isWalking = true;
+  document.getElementById('step-btn').style.background = 'rgba(255,210,140,.35)';
+  document.getElementById('step-btn').innerHTML = '▶ Marcher'; // toujours actif, même si currentNarr joue en fond
+}
+function stopWalking(){
+  if (!isWalking) return; // déjà arrêté, ignore l'appel redondant
+  isWalking=false;
+  // Si on est bloqué à un point narratif, le bouton garde son style "bloqué"
+  if (!blockedAtNarr) {
+    document.getElementById('step-btn').style.background='rgba(255,210,140,.15)';
+  }
+  // La narration en cours n'est PAS coupée — elle continue jusqu'au bout
+  // même si l'utilisateur relâche le bouton manuellement
+}
+
+function setView(v){
+  currentView=v;
+  ['fps','aerial','map'].forEach(n=>{
+    const b=document.getElementById('btn-'+n);
+    if(n===v){b.style.background='rgba(255,210,140,.2)';b.style.borderColor='rgba(255,210,140,.55)';b.style.color='rgba(255,210,140,1)';}
+    else{b.style.background='rgba(255,255,255,.07)';b.style.borderColor='rgba(255,255,255,.2)';b.style.color='rgba(255,255,255,.8)';}
+  });
+  document.getElementById('view-label').textContent={fps:'Vue FPS',aerial:'Vue aérienne',map:'Carte'}[v];
+  mapMesh.visible=(v==='map');
+  document.getElementById('poi-panel').style.display=(v==='map')?'block':'none';
+  if(v==='map'){ activeCamera=mapCam; updatePOIPanel(); }
+  else if(v==='aerial'){ activeCamera=aerialCam; }
+  else{ activeCamera=fpsCam; }
+}
+
+function updatePOIPanel(){
+  const panel=document.getElementById('poi-panel');
+  panel.querySelectorAll('.poi-card').forEach(e=>e.remove());
+  const camPos=getPosOnPath(pathT);
+  poiData.forEach(p=>{
+    const dist=Math.round(Math.sqrt(((p.x||0)-camPos.x)**2+(p.z-camPos.z)**2));
+    const card=document.createElement('div'); card.className='poi-card';
+    card.innerHTML='<div class="poi-name">'+p.name+'</div><div class="poi-dist">'+(dist<30?'✓ Atteint':dist+' m')+'</div>';
+    card.onclick=()=>showNarrative(p.desc||p.name, p.audio_text||p.desc||p.name);
+    panel.appendChild(card);
+  });
+}
+
+function resetJourney(){
+  pathT=0; bobPhase=0; totalDist=0; ended=false;
+  narratives.forEach(n=>{n.done=false;});
+  stopNarration();
+  document.getElementById('end-screen').classList.remove('visible');
+  document.getElementById('narrative-box').style.opacity='0';
+  document.getElementById('progress-fill').style.width='0%';
+  document.getElementById('km-badge').textContent='0.00 km parcouru';
+  closeAttr();
+  // Reset narrations par proximité
+  narrPoints.forEach(n=>{ n.played=false; });
+}
+
+// ══════════════════════════════════════════════════════════
+// BOUCLE PRINCIPALE
+// ══════════════════════════════════════════════════════════
+const WALK_SPEED_MS = 1.35; // vitesse de marche humaine réaliste, m/s (~4.85 km/h)
+let lastFrameTime = performance.now();
+
+function animate(){
+  requestAnimationFrame(animate); frameCount++;
+
+  const now = performance.now();
+  const dt = Math.min(0.1, (now - lastFrameTime) / 1000); // delta en secondes, cap à 100ms (évite les sauts si tab en arrière-plan)
+  lastFrameTime = now;
+
+  if(isWalking&&!ended&&pathPoints.length>1){
+    const distanceThisFrame = WALK_SPEED_MS * dt; // mètres parcourus cette frame
+    const step = distanceThisFrame / pathTotalLength; // fraction du parcours total
+    pathT=Math.min(1, pathT+step);
+    totalDist += distanceThisFrame;
+    bobPhase += dt * 7.5; // oscillation de marche cadencée au temps réel, pas au framerate
+  }
+
+  if(pathT>=1&&!ended&&pathPoints.length>1){
+    ended=true; stopWalking(); synth.cancel();
+    setTimeout(()=>document.getElementById('end-screen').classList.add('visible'),2000);
+  }
+
+  const camPos   = getPosOnPath(pathT);
+  const groundY  = camPos.y - 0.08;
+  const eyeHeight = 1.72; // 1.72m réels
+  const bob       = Math.sin(bobPhase) * (isWalking ? 0.055 : 0);
+  camPos.y = groundY + eyeHeight + bob;
+  const camDir = getDirOnPath(pathT);
+
+  // Collision simple avec les bâtiments — stoppe la marche si mur devant
+  if (isWalking && buildingMeshes.length > 0) {
+    const ray = new THREE.Raycaster(
+      new THREE.Vector3(camPos.x, camPos.y, camPos.z),
+      camDir.clone().normalize(),
+      0, 6  // 6m devant la caméra
+    );
+    const hits = ray.intersectObjects(buildingMeshes);
+    if (hits.length > 0) {
+      pathT = Math.max(0, pathT - 0.00025);
+    }
+  }
+
+  // Narrations par proximité
+  checkNarrTriggers(camPos);
+
+  // Narration linéaire (depuis POI audio_text)
+  for(let i=0;i<narratives.length;i++){
+    if(!narratives[i].done && camPos.z>=narratives[i].z){
+      narratives[i].done=true; showNarrative(narratives[i].text, narratives[i].audio||narratives[i].text); break;
+    }
+  }
+
+  // Debug
+  const utmE = geoOrigin ? Math.round(geoOrigin.e + camPos.x) : 0;
+  const utmN = geoOrigin ? Math.round(geoOrigin.n - camPos.z) : 0;
+  const altM = Math.round(groundY + (altGrid ? altGrid.minAlt : 0));
+  const terrExt = altGrid ? altGrid.ext : null;
+  document.getElementById('debug').textContent=
+    `t:${(pathT*100).toFixed(1)}% | alt:${altM}m\n`+
+    `scène:(${camPos.x.toFixed(1)}, ${camPos.z.toFixed(1)})\n`+
+    `UTM E:${utmE} N:${utmN}\n`+
+    (terrExt?`terrain X[${terrExt.minX.toFixed(0)}..${terrExt.maxX.toFixed(0)}] Z[${terrExt.minZ.toFixed(0)}..${terrExt.maxZ.toFixed(0)}]`:
+    'pas de MNT');
+
+  // Caméra FPS — yeux à 1.72m, regard horizontal dans la direction du tracé
+  const sway  = Math.sin(bobPhase*.5) * (isWalking ? 0.015 : 0);
+  const right  = new THREE.Vector3().crossVectors(camDir, new THREE.Vector3(0,1,0)).normalize();
+  fpsCam.position.copy(camPos).addScaledVector(right, sway);
+  // Regard : même hauteur Y que la caméra, 30m devant — pas de recalcul altitude
+  const lookTarget = new THREE.Vector3(
+    camPos.x + camDir.x * 30,
+    camPos.y,                   // même hauteur → regard horizontal
+    camPos.z + camDir.z * 30
+  );
+  fpsCam.lookAt(lookTarget);
+
+  // Avatar — matérialise la position du marcheur (vue aérienne/carte)
+  updateAvatar(camPos, camDir, currentView);
+
+  // Caméra aérienne — hauteur proportionnelle au parcours, min 200m
+  const diag = pathTotalLength || 1000;
+  const aerialH = Math.max(Math.min(diag * 0.25, 2000), groundY + 200);
+  aerialCam.position.set(camPos.x + diag*0.10, aerialH, camPos.z + diag*0.15);
+  aerialCam.lookAt(camPos.x, groundY, camPos.z);
+
+  // Carte orthographique — hauteur fixe 5000m au-dessus
+  mapCam.position.set(camPos.x, groundY + 5000, camPos.z);
+  mapCam.lookAt(camPos.x, groundY, camPos.z);
+
+  // UI
+  document.getElementById('progress-fill').style.width=(pathT*100).toFixed(1)+'%';
+  document.getElementById('km-badge').textContent=(totalDist/1000).toFixed(3)+' km parcouru';
+
+  // POI markers
+  poiObjects.forEach(o=>{
+    const d=camPos.distanceTo(o.marker.position);
+    o.mat.color.setHex(d<10?0xff3300:0xffaa00);
+    o.marker.position.y=(o.data.y||0) + 3 + Math.sin(frameCount*.04+o.data.z)*0.5;
+    o.rMat.opacity=d<25?.65:.25;
+  });
+
+  if(currentView==='map'&&frameCount%2===0){
+    drawMap(camPos, camDir); mapTex2.needsUpdate=true;
+    if(frameCount%30===0) updatePOIPanel();
+  }
+
+  sun.position.set(camPos.x + 800, 1300, camPos.z + 400);
+  renderer.render(scene,activeCamera);
+}
+animate();
+
+let spaceHeld = false;
+document.addEventListener('keydown',e=>{
+  if(e.code==='Space'){
+    e.preventDefault();
+    if (!spaceHeld) { spaceHeld = true; startWalking(); } // ignore les répétitions auto du navigateur
+  }
+  if(e.code==='Digit1')setView('fps');
+  if(e.code==='Digit2')setView('aerial');
+  if(e.code==='Digit3')setView('map');
+  if(e.code==='Escape'){ closeAttr(); closeExport(); }
+});
+document.addEventListener('keyup',e=>{
+  if(e.code==='Space'){ spaceHeld = false; stopWalking(); }
+});
+window.addEventListener('resize',()=>{
+  const w=window.innerWidth,h=window.innerHeight;
+  renderer.setSize(w,h);
+  [fpsCam,aerialCam].forEach(c=>{c.aspect=w/h;c.updateProjectionMatrix();});
+  mapCam.updateProjectionMatrix();
+});
+
+// ══════════════════════════════════════════════════════════
+// DÉTECTION MOBILE + ACCÉLÉROMÈTRE
+// ══════════════════════════════════════════════════════════
+
+let accelMode = false;          // true = mode accéléromètre actif
+let lastMagnitude = 0;          // magnitude accélération précédente
+let lastStepTime  = 0;          // timestamp du dernier pas détecté
+let noStepTimer   = null;       // timer d'arrêt si plus de pas
+const STEP_THRESHOLD  = 1.8;   // seuil de détection de pas (m/s²)
+const STEP_MIN_INTERVAL = 280;  // intervalle minimum entre deux pas (ms)
+const NO_STEP_TIMEOUT   = 1500; // ms sans pas → on arrête la marche
+
+function isMobile() {
+  return /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && window.innerWidth < 1024);
+}
+
+// Affiche le bouton accéléromètre si on est sur mobile
+function initMobileUI() {
+  if (isMobile()) {
+    document.getElementById('accel-btn').style.display = 'block';
+    // Sur mobile, le bouton Marcher classique passe en mode secondaire
+    document.getElementById('step-btn').innerHTML = '▶ Manuel';
+  }
+}
+
+async function toggleAccelMode() {
+  if (accelMode) {
+    // Désactive
+    accelMode = false;
+    window.removeEventListener('devicemotion', onDeviceMotion);
+    if (noStepTimer) { clearTimeout(noStepTimer); noStepTimer = null; }
+    stopWalking();
+    document.getElementById('accel-btn').textContent = '📱 Mode marche';
+    document.getElementById('accel-btn').style.background = 'rgba(120,200,255,.15)';
+    return;
+  }
+
+  // iOS 13+ nécessite une permission explicite
+  if (typeof DeviceMotionEvent !== 'undefined'
+      && typeof DeviceMotionEvent.requestPermission === 'function') {
+    try {
+      const result = await DeviceMotionEvent.requestPermission();
+      if (result !== 'granted') {
+        alert('Permission refusée. Active le capteur de mouvement dans les réglages Safari.');
+        return;
+      }
+    } catch(e) {
+      alert('Erreur permission capteur : ' + e.message);
+      return;
+    }
+  } else if (typeof DeviceMotionEvent === 'undefined') {
+    alert('Accéléromètre non disponible sur cet appareil.');
+    return;
+  }
+
+  // Active le mode
+  accelMode = true;
+  lastMagnitude = 0;
+  lastStepTime  = 0;
+  document.getElementById('accel-btn').textContent = '🔴 Arrêter capteur';
+  document.getElementById('accel-btn').style.background = 'rgba(255,100,80,.25)';
+  window.addEventListener('devicemotion', onDeviceMotion);
+}
+
+function onDeviceMotion(e) {
+  if (!accelMode) return;
+  const acc = e.accelerationIncludingGravity;
+  if (!acc) return;
+
+  const mag   = Math.sqrt((acc.x||0)**2 + (acc.y||0)**2 + (acc.z||0)**2);
+  const delta = Math.abs(mag - lastMagnitude);
+  lastMagnitude = mag;
+
+  const now = Date.now();
+  if (delta > STEP_THRESHOLD && (now - lastStepTime) > STEP_MIN_INTERVAL) {
+    lastStepTime = now;
+    onStepDetected();
+  }
+}
+
+function onStepDetected() {
+  unlockSynth();
+
+  // Démarre la marche si elle n'était pas en cours
+  if (!isWalking && !blockedAtNarr) {
+    isWalking = true;
+    document.getElementById('step-btn').style.background = 'rgba(255,210,140,.35)';
+  }
+
+  // Remet le timer d'arrêt à zéro
+  if (noStepTimer) clearTimeout(noStepTimer);
+  noStepTimer = setTimeout(() => {
+    // Plus de pas depuis NO_STEP_TIMEOUT ms → on arrête
+    stopWalking();
+    noStepTimer = null;
+  }, NO_STEP_TIMEOUT);
+}
+
+// Lance la détection mobile au chargement
+window.addEventListener('load', initMobileUI);
+
+// Stocke les GeoJSON bruts au moment du chargement
+let _rawParcours   = null;
+let _rawPOI        = null;
+let _rawNarrations = null;
+let _rawBati       = null;
+let _rawOS         = null;
+let _rawMNT        = null; // ArrayBuffer du GeoTIFF MNT
+let _rawSAT        = null; // ArrayBuffer du GeoTIFF satellite
+
+let _exportMode = 'autonome';
+
+function openExport() {
+  document.getElementById('export-progress').textContent = '';
+  document.getElementById('export-modal').classList.add('visible');
+}
+function closeExport() {
+  document.getElementById('export-modal').classList.remove('visible');
+}
+function selectExportMode(mode, el) {
+  _exportMode = mode;
+  document.querySelectorAll('.export-radio').forEach(r=>r.classList.remove('selected'));
+  el.classList.add('selected');
+  const urlBox = document.getElementById('export-urls');
+  const urlOsField  = document.getElementById('url-os-field');
+  const urlAllField = document.getElementById('url-all-field');
+  if (mode === 'autonome') {
+    urlBox.classList.remove('visible');
+  } else if (mode === 'hybride') {
+    urlBox.classList.add('visible');
+    urlOsField.style.display  = 'block';
+    urlAllField.style.display = 'none';
+  } else if (mode === 'relatif') {
+    urlBox.classList.remove('visible'); // pas d'URL à saisir, chemins automatiques
+  } else { // distant
+    urlBox.classList.add('visible');
+    urlOsField.style.display  = 'none';
+    urlAllField.style.display = 'block';
+  }
+}
+
+async function doExport() {
+  const prog = document.getElementById('export-progress');
+  const title = document.getElementById('export-title').value || 'Walking Story';
+  prog.textContent = '⏳ Préparation des données…';
+
+  // Récupère le code source — outerHTML fonctionne en file:// et http://
+  // On clone le document pour ne pas modifier l'original
+  const srcHtml = '<!DOCTYPE html>\n' + document.documentElement.outerHTML;
+
+  // Construit le bloc de données selon le mode
+  let dataBlock = '';
+
+  if (_exportMode === 'autonome') {
+    prog.textContent = '⏳ Embarquement MNT…';
+    await new Promise(r=>setTimeout(r,20));
+
+    // MNT en base64
+    let mntB64 = null;
+    if (_rawMNT) {
+      const bytes = new Uint8Array(_rawMNT);
+      let bin = '';
+      bytes.forEach(b=>bin+=String.fromCharCode(b));
+      mntB64 = btoa(bin);
+    }
+
+    // Satellite en base64
+    let satB64 = null;
+    if (_rawSAT) {
+      prog.textContent = '⏳ Embarquement satellite…';
+      await new Promise(r=>setTimeout(r,20));
+      const bytes = new Uint8Array(_rawSAT);
+      let bin = '';
+      bytes.forEach(b=>bin+=String.fromCharCode(b));
+      satB64 = btoa(bin);
+    }
+
+    // OS en JSON
+    const osJSON = _rawOS ? JSON.stringify(_rawOS) : 'null';
+
+    // Audio files en base64
+    prog.textContent = '⏳ Embarquement audio…';
+    await new Promise(r=>setTimeout(r,20));
+    const audioB64 = {};
+    for (const [name, blobUrl] of Object.entries(audioBlobs)) {
+      try {
+        const resp = await fetch(blobUrl);
+        const buf  = await resp.arrayBuffer();
+        const bytes = new Uint8Array(buf);
+        let bin = '';
+        bytes.forEach(b => bin += String.fromCharCode(b));
+        audioB64[name] = btoa(bin);
+      } catch(e) { console.warn('Audio non embarqué:', name, e); }
+    }
+
+    dataBlock = `
+<scr${''}ipt>
+// ── Données embarquées ──────────────────────────────────
+window.EMBEDDED = {
+  title:      ${JSON.stringify(title)},
+  geoOrigin:  ${JSON.stringify(geoOrigin)},
+  parcours:   ${_rawParcours  ? JSON.stringify(_rawParcours)   : 'null'},
+  pois:       ${_rawPOI       ? JSON.stringify(_rawPOI)        : 'null'},
+  narrations: ${_rawNarrations? JSON.stringify(_rawNarrations) : 'null'},
+  bati:       ${_rawBati      ? JSON.stringify(_rawBati)       : 'null'},
+  os:         ${osJSON},
+  mnt_b64:    ${mntB64 ? JSON.stringify(mntB64) : 'null'},
+  sat_b64:    ${satB64 ? JSON.stringify(satB64) : 'null'},
+  audio_b64:  ${JSON.stringify(audioB64)},
+  mnt_url:    null,
+  sat_url:    null,
+  os_url:     null,
+};
+<\/script>`;
+
+  } else if (_exportMode === 'hybride') {
+    const mntUrl = document.getElementById('url-mnt').value.trim();
+    const osUrl  = document.getElementById('url-os').value.trim();
+    dataBlock = `
+<scr${''}ipt>
+window.EMBEDDED = {
+  title:      ${JSON.stringify(title)},
+  geoOrigin:  ${JSON.stringify(geoOrigin)},
+  parcours:   ${_rawParcours  ? JSON.stringify(_rawParcours)   : 'null'},
+  pois:       ${_rawPOI       ? JSON.stringify(_rawPOI)        : 'null'},
+  narrations: ${_rawNarrations? JSON.stringify(_rawNarrations) : 'null'},
+  bati:       ${_rawBati      ? JSON.stringify(_rawBati)       : 'null'},
+  os:         null,
+  mnt_b64:    null,
+  sat_b64:    null,
+  mnt_url:    ${JSON.stringify(mntUrl||null)},
+  sat_url:    null,
+  os_url:     ${JSON.stringify(osUrl||null)},
+};
+<\/script>`;
+
+  } else if (_exportMode === 'relatif') {
+    // Liste des fichiers audio référencés par les narrations (via audio_file)
+    const audioFileNames = _rawNarrations && _rawNarrations.features
+      ? [...new Set(_rawNarrations.features
+          .map(f => f.properties && f.properties.audio_file)
+          .filter(Boolean)
+          .map(f => f.split('/').pop().split('\\').pop()))]
+      : [];
+    dataBlock = `
+<scr${''}ipt>
+window.EMBEDDED = {
+  title:        ${JSON.stringify(title)},
+  geoOrigin:    ${JSON.stringify(geoOrigin)},
+  parcours:     null, pois: null, narrations: null, bati: null, os: null, mnt_b64: null, sat_b64: null,
+  mnt_url:      './mnt.tif',
+  sat_url:      './satellite.tif',
+  os_url:       './os.geojson',
+  parcours_url: './parcours.geojson',
+  pois_url:     './pois.geojson',
+  narr_url:     './narrations.geojson',
+  bati_url:     './bati.geojson',
+  audio_files:  ${JSON.stringify(audioFileNames)},
+  audio_base:   './audio/',
+};
+<\/script>`;
+
+  } else { // distant
+    const baseUrl = document.getElementById('url-all').value.trim().replace(/\/$/,'');
+    dataBlock = `
+<scr${''}ipt>
+window.EMBEDDED = {
+  title:      ${JSON.stringify(title)},
+  geoOrigin:  ${JSON.stringify(geoOrigin)},
+  parcours:   null, pois: null, narrations: null, bati: null, os: null, mnt_b64: null, sat_b64: null,
+  mnt_url:    ${JSON.stringify(baseUrl ? baseUrl+'/mnt.tif'          : null)},
+  sat_url:    ${JSON.stringify(baseUrl ? baseUrl+'/satellite.tif'    : null)},
+  os_url:     ${JSON.stringify(baseUrl ? baseUrl+'/os.geojson'       : null)},
+  parcours_url:${JSON.stringify(baseUrl ? baseUrl+'/parcours.geojson': null)},
+  pois_url:   ${JSON.stringify(baseUrl ? baseUrl+'/pois.geojson'     : null)},
+  narr_url:   ${JSON.stringify(baseUrl ? baseUrl+'/narrations.geojson':null)},
+  bati_url:   ${JSON.stringify(baseUrl ? baseUrl+'/bati.geojson'     : null)},
+};
+<\/script>`;
+  }
+
+  // Injecte le bloc de données + le loader embarqué dans le HTML source
+  const loaderScript = `
+<scr${''}ipt>
+// ── Loader données embarquées (s'exécute au démarrage) ──
+(async function() {
+  const E = window.EMBEDDED; if(!E) return;
+  // Attend que le DOM soit prêt
+  await new Promise(r => { if(document.readyState==='complete') r(); else window.addEventListener('load',r); });
+  // Attend que les fonctions principales soient disponibles (max 15s)
+  let tries=0;
+  while(typeof loadGeoTIFF_data !== 'function' && tries++<300) await new Promise(r=>setTimeout(r,50));
+  if(typeof loadGeoTIFF_data !== 'function') { console.error('Timeout: fonctions non disponibles'); return; }
+  console.log('Loader embarqué: fonctions disponibles, chargement des données...');
+
+  if(E.title) { document.getElementById('story-title').textContent=E.title; document.title='Walking Story — '+E.title; }
+
+  if(E.mnt_b64) {
+    const bin=atob(E.mnt_b64); const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    await loadGeoTIFF_data(bytes.buffer, E.geoOrigin);
+  } else if(E.mnt_url) {
+    const buf=await fetch(E.mnt_url).then(r=>r.arrayBuffer());
+    await loadGeoTIFF_data(buf, E.geoOrigin);
+  } else if(E.geoOrigin) {
+    setOrigin(E.geoOrigin.e, E.geoOrigin.n);
+  }
+
+  const loadGJ = async (data, url, fn) => {
+    try {
+      if (data) { await fn(data); console.log('Loader: chargé inline', fn.name); }
+      else if (url) { const g = await fetch(url).then(r=>r.json()); await fn(g); console.log('Loader: chargé URL', url); }
+    } catch(e) { console.error('Loader erreur', fn.name, e); }
+  };
+  await loadGJ(E.parcours,   E.parcours_url,   loadParcours_data);
+  await loadGJ(E.pois,       E.pois_url,       loadPOI_data);
+  await loadGJ(E.narrations, E.narr_url,       loadNarrations_data);
+  await loadGJ(E.bati,       E.bati_url,       loadBati_data);
+  await loadGJ(E.os,         E.os_url,         loadOS_data);
+
+  // Reconstitue les fichiers audio depuis base64 (mode autonome)
+  if (E.audio_b64 && Object.keys(E.audio_b64).length > 0) {
+    for (const [name, b64] of Object.entries(E.audio_b64)) {
+      try {
+        const bin = atob(b64);
+        const bytes = new Uint8Array(bin.length);
+        for (let i=0; i<bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const ext = name.split('.').pop().toLowerCase();
+        const mimeMap = {mp3:'audio/mpeg', wav:'audio/wav', ogg:'audio/ogg', m4a:'audio/mp4'};
+        const mime = mimeMap[ext] || 'audio/mpeg';
+        const blob = new Blob([bytes], {type: mime});
+        const url  = URL.createObjectURL(blob);
+        audioBlobs[name] = url;
+        narrPoints.forEach(n => {
+          if (n.audio_file && matchAudioFile(n.audio_file, name)) n.audioBlobURL = url;
+        });
+      } catch(e) { console.warn('Erreur audio b64:', name, e); }
+    }
+  }
+
+  // Charge les fichiers audio depuis URLs (mode relatif/distant)
+  if (E.audio_files && E.audio_files.length > 0 && E.audio_base) {
+    for (const name of E.audio_files) {
+      try {
+        const url = E.audio_base + name;
+        // Vérifie l'existence avant d'utiliser directement l'URL comme source
+        const resp = await fetch(url, {method:'HEAD'}).catch(()=>null);
+        if (resp && resp.ok) {
+          audioBlobs[name] = url;
+          narrPoints.forEach(n => {
+            if (n.audio_file && matchAudioFile(n.audio_file, name)) n.audioBlobURL = url;
+          });
+        }
+      } catch(e) { console.warn('Audio non trouvé:', name); }
+    }
+  }
+
+  // Révèle la scène même si pas de MNT
+  if (!altGrid) {
+    revealSky();
+    dismissEmpty();
+  }
+
+  console.log('Loader: terminé. pathPoints:', pathPoints.length, 'geoOrigin:', geoOrigin);
+
+  // Satellite
+  if (E.sat_b64) {
+    const bin=atob(E.sat_b64); const bytes=new Uint8Array(bin.length);
+    for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
+    await loadSatellite_data(bytes.buffer);
+  } else if (E.sat_url) {
+    try {
+      const buf = await fetch(E.sat_url).then(r=>r.arrayBuffer());
+      await loadSatellite_data(buf);
+    } catch(e) { console.warn('Satellite non trouvé:', E.sat_url); }
+  }
+})();
+<\/script>`;
+
+  prog.textContent = '⏳ Génération du fichier…';
+  await new Promise(r=>setTimeout(r,20));
+
+  // Insère le bloc données + loader juste avant la fermeture du head
+  // (marqueur HTML unique pour éviter tout conflit avec du texte JS similaire)
+  let out = srcHtml.replace(
+    /<\/head>/,
+    dataBlock + loaderScript + '\n</head>'
+  );
+
+  // Supprime le panel SIG (boutons de chargement) — inutile dans la version exportée
+  out = out.replace(
+    /<!-- Panel SIG -->[\s\S]*?<div id="poi-panel">/,
+    '<div id="poi-panel">'
+  );
+
+  // Cache le bouton export
+  out = out.replace('onclick="openExport()"', 'style="display:none" onclick="openExport()"');
+
+  // Cache le bouton audio (pas de chargement de fichiers dans l'exporté)
+  out = out.replace('id="btn-audio"', 'id="btn-audio" style="display:none"');
+
+  // Supprime la modal export (inutile dans l'exporté)
+  out = out.replace(
+    /<!-- Modal export -->[\s\S]*?<div id="end-screen">/,
+    '<div id="end-screen">'
+  );
+
+  // Supprime les fonctions de patch (boutons fichier) inutiles dans l'exporté
+  out = out.replace(
+    /\/\/ ── PATCH_EXPORT_START ──[\s\S]*?<\/script>/,
+    '// données chargées via window.EMBEDDED\n<' + '/script>'
+  );
+
+  const blob = new Blob([out], {type:'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = title.replace(/[^a-zA-Z0-9_-]/g,'_') + '_parcours.html';
+  a.click();
+  URL.revokeObjectURL(a.href);
+
+  // Pour le mode relatif : génère aussi un README avec la liste des fichiers à déposer
+  if (_exportMode === 'relatif') {
+    const readmeContent = `DÉPLOIEMENT — ${title}
+${'='.repeat(40)}
+
+Déposez ces fichiers dans le MÊME dossier sur votre serveur :
+
+  ✓ ${title.replace(/[^a-zA-Z0-9_-]/g,'_')}_parcours.html   ← fichier HTML exporté
+  ✓ mnt.tif                ← MNT GeoTIFF
+  ✓ satellite.tif          ← image satellite GeoTIFF RGB (optionnel)
+  ✓ parcours.geojson       ← tracé du parcours
+  ✓ pois.geojson           ← points d'intérêt
+  ✓ narrations.geojson     ← déclencheurs audio/texte
+  ✓ bati.geojson           ← bâtiments extrudés
+  ✓ os.geojson             ← occupation du sol
+  ✓ audio/                 ← dossier contenant les fichiers MP3 référencés
+                              dans narrations.geojson (audio_file)
+
+Aucune configuration serveur requise (pas de CORS).
+Fonctionne sur : GitHub Pages, Netlify, OVH, Apache, Nginx...
+
+Pour tester en local :
+  → Ne pas ouvrir directement le HTML (file://)
+  → Utiliser un serveur local :
+     python3 -m http.server 8080
+     puis ouvrir http://localhost:8080
+`;
+    const rb = new Blob([readmeContent], {type:'text/plain'});
+    const ra = document.createElement('a');
+    ra.href = URL.createObjectURL(rb);
+    ra.download = 'DEPLOIEMENT_README.txt';
+    setTimeout(()=>{ ra.click(); URL.revokeObjectURL(ra.href); }, 500);
+  }
+
+  prog.textContent = '✓ Fichier téléchargé !'
+    + (_exportMode==='relatif' ? ' + README déploiement' : '');
+  setTimeout(closeExport, 2000);
+}
+
+// ── Fonctions _data : versions acceptant un objet GeoJSON directement ──
+// (utilisées par le loader embarqué ET pour stocker les raw)
+
+async function loadGeoTIFF_data(arrayBuffer, originOverride) {
+  try {
+    showLoader('Chargement MNT embarqué…');
+    const tiff  = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+    const image = await tiff.getImage();
+    const bbox  = image.getBoundingBox();
+    const imgW  = image.getWidth(), imgH = image.getHeight();
+    const [minE,minN,maxE,maxN] = bbox;
+    if (originOverride) { geoOrigin = originOverride; }
+    else { setOrigin(minE, minN); }
+    showLoader('Extraction altitudes…');
+    const rasters = await image.readRasters({interleave:true});
+    let minAlt=Infinity, maxAlt=-Infinity;
+    for(let i=0;i<rasters.length;i++){const v=rasters[i];if(isFinite(v)&&v>-9000){if(v<minAlt)minAlt=v;if(v>maxAlt)maxAlt=v;}}
+    function gaussSmooth(data,w,h,passes=3){const K=[1,2,1,2,4,2,1,2,1];let d=Float32Array.from(data);for(let p=0;p<passes;p++){const out=new Float32Array(d.length);for(let y=0;y<h;y++)for(let x=0;x<w;x++){let sum=0,wsum=0,ki=0;for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){const nx=x+dx,ny=y+dy,w2=K[ki++];if(nx>=0&&nx<w&&ny>=0&&ny<h){const v=d[ny*w+nx];if(isFinite(v)&&v>-9000){sum+=v*w2;wsum+=w2;}}}out[y*w+x]=wsum>0?sum/wsum:d[y*w+x];}d=out;}return d;}
+    function upsample(data,w,h,scale){const nw=Math.round(w*scale),nh=Math.round(h*scale),out=new Float32Array(nw*nh);for(let y=0;y<nh;y++)for(let x=0;x<nw;x++){const fx=(x/(nw-1))*(w-1),fy=(y/(nh-1))*(h-1),x0=Math.floor(fx),x1=Math.min(w-1,x0+1),y0=Math.floor(fy),y1=Math.min(h-1,y0+1),tx=fx-x0,ty=fy-y0;out[y*nw+x]=data[y0*w+x0]*(1-tx)*(1-ty)+data[y0*w+x1]*tx*(1-ty)+data[y1*w+x0]*(1-tx)*ty+data[y1*w+x1]*tx*ty;}return{data:out,w:nw,h:nh};}
+    const smoothed=gaussSmooth(rasters,imgW,imgH,3);
+    const up=upsample(smoothed,imgW,imgH,4);
+    const finalData=gaussSmooth(up.data,up.w,up.h,1);
+    let minAlt2=Infinity,maxAlt2=-Infinity;
+    for(let i=0;i<finalData.length;i++){const v=finalData[i];if(isFinite(v)&&v>-9000){if(v<minAlt2)minAlt2=v;if(v>maxAlt2)maxAlt2=v;}}
+    const scSW=utmToScene(minE,minN),scNE=utmToScene(maxE,maxN);
+    const ext={minX:scSW.x,maxX:scNE.x,minZ:scNE.z,maxZ:scSW.z};
+    buildTerrainFromRaster(up.w,up.h,finalData,minAlt2,maxAlt2,ext);
+    revealSky(); dismissEmpty();
+    if(pathPoints.length>1){buildPath(pathPoints);}
+    if(poiData.length>0){poiData.forEach(p=>{p.y=getAltAt(p.x,p.z);});buildPOIMarkers();}
+    hideLoader();
+  } catch(e){hideLoader();console.error('MNT embarqué:',e);}
+}
+
+function loadParcours_data(g) {
+  if(!g||!g.features) return;
+  _rawParcours = g;
+  let coords=[];
+  g.features.forEach(f=>{if(f.geometry&&f.geometry.type==='LineString')coords=f.geometry.coordinates;});
+  if(!coords.length) return;
+  if(!geoOrigin){const c=coords[0];if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]);else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);}}
+  pathPoints=coords.map(c=>{const s=anyToScene(c[0],c[1]);return new THREE.Vector3(s.x,.2,s.z);});
+  buildPath(pathPoints); pathT=0; dismissEmpty();
+  markLoaded('btn-parcours');
+}
+
+function loadPOI_data(g) {
+  if(!g||!g.features) return;
+  _rawPOI = g;
+  if(!geoOrigin&&g.features.length){const c=g.features[0].geometry.coordinates;if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]);else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);}}
+  poiData=g.features.map(f=>{const c=f.geometry.coordinates,s=anyToScene(c[0],c[1]),y=getAltAt(s.x,s.z);return{name:f.properties.name||'Point',desc:f.properties.description||f.properties.desc||'',audio_text:f.properties.audio_text||f.properties.description||'',x:s.x,z:s.z,y,props:f.properties};});
+  buildPOIMarkers(); narratives.length=0;
+  poiData.forEach(p=>{if(p.audio_text)narratives.push({z:p.z-3,done:false,text:p.audio_text});});
+  narratives.sort((a,b)=>a.z-b.z);
+  markLoaded('btn-poi');
+  updateDefaultViewCenter();
+}
+
+function loadNarrations_data(g) {
+  if(!g||!g.features) return;
+  _rawNarrations = g;
+  if(!geoOrigin&&g.features.length){const c=g.features[0].geometry.coordinates;if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]);else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);}}
+  narrPoints=g.features.filter(f=>f.geometry&&f.geometry.type==='Point').map(f=>{
+    const c=f.geometry.coordinates,sc=anyToScene(c[0],c[1]),p=f.properties||{};
+    const radiusM=parseFloat(p.trigger_radius||DEFAULT_TRIGGER_RADIUS);
+    return{x:sc.x,z:sc.z,radiusScene:narrRadiusToScene(radiusM),radiusM,name:p.name||'',texte:p.texte||p.text||p.description||'',audio_text:p.audio_text||p.texte||p.text||'',audio_file:p.audio_file||null,audioBlobURL:null,delai:parseFloat(p.delai||0),categorie:p.categorie||'',triggered:false};
+  });
+  narrPoints.forEach(n=>{const rg=new THREE.RingGeometry(n.radiusScene-.05,n.radiusScene,24);rg.rotateX(-Math.PI/2);const rm=new THREE.Mesh(rg,new THREE.MeshBasicMaterial({color:0xff6600,transparent:true,opacity:.4}));rm.position.set(n.x,getAltAt(n.x,n.z)+.15,n.z);scene.add(rm);n.debugMesh=rm;});
+  markLoaded('btn-narr');
+}
+
+function loadBati_data(g) {
+  if(!g||!g.features) return;
+  _rawBati = g;
+  while(batiGroup.children.length)batiGroup.remove(batiGroup.children[0]);
+  buildingMeshes=[];
+  g.features.forEach(f=>{
+    if(!f.geometry)return;
+    let rings=[];
+    if(f.geometry.type==='Polygon')rings=[f.geometry.coordinates[0]];
+    else if(f.geometry.type==='MultiPolygon')f.geometry.coordinates.forEach(p=>rings.push(p[0]));
+    rings.forEach(ring=>{
+      if(!geoOrigin){const c=ring[0];if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]);else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);}}
+      const sr=ring.slice(0,-1).map(c=>{const s=anyToScene(c[0],c[1]);return[s.x,s.z];});
+      if(sr.length<3)return;
+      const props=Object.assign({name:'Bâtiment'},f.properties||{});
+      const hM=parseFloat(props.height||props.hauteur||(props['building:levels']&&props['building:levels']*3.2)||DEFAULT_HEIGHT_M)||DEFAULT_HEIGHT_M;
+      extrudePolygon(sr,hM,props);
+    });
+  });
+  markLoaded('btn-bati');
+  updateDefaultViewCenter();
+}
+
+function loadOS_data(g) {
+  if(!g||!g.features) return;
+  _rawOS = g;
+  while(osGroup.children.length)osGroup.remove(osGroup.children[0]);
+  if(!geoOrigin&&g.features.length){const c=g.features[0].geometry.coordinates[0][0];if(isUTM(c[0],c[1]))setOrigin(c[0],c[1]);else{const m=wgs84ToUTM(c[0],c[1]);setOrigin(m.e,m.n);}}
+  let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
+  const converted=g.features.map(f=>{
+    if(!f.geometry)return null;
+    const rings=f.geometry.type==='Polygon'?[f.geometry.coordinates[0]]:f.geometry.type==='MultiPolygon'?f.geometry.coordinates.map(p=>p[0]):[];
+    const scRings=rings.map(ring=>ring.map(c=>{const s=anyToScene(c[0],c[1]);if(s.x<minX)minX=s.x;if(s.x>maxX)maxX=s.x;if(s.z<minZ)minZ=s.z;if(s.z>maxZ)maxZ=s.z;return[s.x,s.z];}));
+    return{properties:f.properties,geometry:{type:f.geometry.type,coordinates:scRings}};
+  }).filter(Boolean);
+  buildOSTexture(converted,{minX,maxX,minZ,maxZ});
+  converted.forEach(f=>{const type=normalizeOSType(f.properties),style=type?OS_STYLE[type]:null;if(!style)return;f.geometry.coordinates.forEach(ring=>{if(type==='eau')makeWaterPlane(ring);else if(style.treeColor)plantTrees(ring,style);});});
+  markLoaded('btn-os');
+}
+
+async function loadSatellite_data(arrayBuffer) {
+  try {
+    const tiff  = await GeoTIFF.fromArrayBuffer(arrayBuffer);
+    const image = await tiff.getImage();
+    const bbox  = image.getBoundingBox();
+    const imgW  = image.getWidth(), imgH = image.getHeight();
+    const [minE,minN,maxE,maxN] = bbox;
+    const nbBands = image.getSamplesPerPixel();
+    if (nbBands < 3) throw new Error(`${nbBands} bande(s) — attendu RGB`);
+    const rasters = await image.readRasters({ interleave:false });
+    const R=rasters[0], G=rasters[1], B=rasters[2];
+    const satCanvas=document.createElement('canvas');
+    satCanvas.width=imgW; satCanvas.height=imgH;
+    const ctx=satCanvas.getContext('2d');
+    const imgData=ctx.createImageData(imgW,imgH); const d=imgData.data;
+    const maxVal=Math.max(...Array.from(R.slice(0,100)));
+    const scale=maxVal>255?1/256:1;
+    for(let i=0;i<imgW*imgH;i++){d[i*4]=Math.min(255,Math.round(R[i]*scale));d[i*4+1]=Math.min(255,Math.round(G[i]*scale));d[i*4+2]=Math.min(255,Math.round(B[i]*scale));d[i*4+3]=255;}
+    ctx.putImageData(imgData,0,0);
+    if(!geoOrigin)setOrigin(minE,minN);
+    const scSW=utmToScene(minE,minN),scNE=utmToScene(maxE,maxN);
+    const satExt={minX:scSW.x,maxX:scNE.x,minZ:scNE.z,maxZ:scSW.z};
+    if(satTexture)satTexture.dispose();
+    satTexture=new THREE.CanvasTexture(satCanvas);
+    satTexture.wrapS=satTexture.wrapT=THREE.ClampToEdgeWrapping;
+    satTexture.minFilter=satTexture.magFilter=THREE.LinearFilter;
+    if(terrainMesh){
+      const terrExt=altGrid?altGrid.ext:satExt;
+      const terrW=terrExt.maxX-terrExt.minX,terrH=terrExt.maxZ-terrExt.minZ;
+      const satW=satExt.maxX-satExt.minX,satH=satExt.maxZ-satExt.minZ;
+      satTexture.repeat.set(terrW/satW,terrH/satH);
+      satTexture.offset.set((terrExt.minX-satExt.minX)/satW,(terrExt.minZ-satExt.minZ)/satH);
+    }
+    applyTerrainTexture();
+    markLoaded('btn-sat');
+  } catch(e){ console.error('Satellite data:',e); }
+}
+
+// Capture raw satellite pour export autonome
+// ── PATCH_EXPORT_START ──────────────────────────────────────────────────────
+const _origLoadSatellite = loadSatellite;
+async function loadSatellite(input) {
+  const file=input.files[0]; if(!file) return;
+  _rawSAT = await file.arrayBuffer();
+  const clone = _rawSAT.slice(0);
+  showLoader('Lecture GeoTIFF satellite…');
+  sigStatus('⏳ Lecture satellite…');
+  try {
+    await loadSatellite_data(clone);
+    const tiff=await GeoTIFF.fromArrayBuffer(_rawSAT.slice(0));
+    const img=await tiff.getImage();
+    sigStatus(`✓ Satellite chargé\n${img.getWidth()}×${img.getHeight()}px`);
+    markLoaded('btn-sat');
+    hideLoader();
+  } catch(e){ hideLoader(); sigStatus('✗ Satellite: '+e.message,false); }
+}
+const _origLoadParcours=loadParcours;
+function loadParcours(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{const g=JSON.parse(e.target.result);_rawParcours=g;loadParcours_data(g);sigStatus('✓ Parcours chargé');}catch(err){sigStatus('✗ Parcours: '+err.message,false);}};r.readAsText(file);}
+
+const _origLoadPOI=loadPOI;
+function loadPOI(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{const g=JSON.parse(e.target.result);loadPOI_data(g);sigStatus('✓ '+poiData.length+' POI chargés');}catch(err){sigStatus('✗ POI: '+err.message,false);}};r.readAsText(file);}
+
+const _origLoadNarrations=loadNarrations;
+function loadNarrations(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{const g=JSON.parse(e.target.result);loadNarrations_data(g);sigStatus('✓ '+narrPoints.length+' narrations chargées');}catch(err){sigStatus('✗ Narrations: '+err.message,false);}};r.readAsText(file);}
+
+const _origLoadBati=loadBati;
+function loadBati(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{const g=JSON.parse(e.target.result);loadBati_data(g);sigStatus('✓ bâtiments chargés');}catch(err){sigStatus('✗ Bâti: '+err.message,false);}};r.readAsText(file);}
+
+const _origLoadOS=loadOS;
+function loadOS(input){const file=input.files[0];if(!file)return;const r=new FileReader();r.onload=e=>{try{const g=JSON.parse(e.target.result);loadOS_data(g);sigStatus('✓ OS chargée');}catch(err){sigStatus('✗ OS: '+err.message,false);}};r.readAsText(file);}
+
+// Capture du MNT brut pour export autonome
+const _origLoadGeoTIFF=loadGeoTIFF;
+async function loadGeoTIFF(input){
+  const file=input.files[0];if(!file)return;
+  _rawMNT=await file.arrayBuffer();
+  // Clone pour ne pas consommer le buffer
+  const clone=_rawMNT.slice(0);
+  await loadGeoTIFF_data(clone, null);
+  sigStatus('✓ MNT chargé');markLoaded('btn-tif');
+}
+</script>
+</body>
+</html>
